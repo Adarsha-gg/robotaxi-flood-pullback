@@ -91,18 +91,27 @@ def _near_route(points, coords, m):
 def plan(from_q, to_q, depart=None):
     a, b = geocode(from_q), geocode(to_q)
     depart = depart or datetime.now(SF_TZ).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M")
-    hours = LR.live_forecast()
+    try:
+        hours = LR.live_forecast()
+    except Exception:   # forecast outage: plan without rain rather than fail the trip
+        hours = [{"t": (datetime.fromisoformat(depart) + timedelta(hours=h)).strftime("%Y-%m-%dT%H:00"), "mm": 0.0} for h in range(-2, 24)]
     cells = {c["id"]: c for c in ride._j("cells_street_live.json")["cells"]}
     fast = ride._route([a["lat"], a["lon"]], [b["lat"], b["lon"]], [], depart, no_freeways=True)
     six = LR._six(hours, (datetime.fromisoformat(depart) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"))
 
     # 1) flood notices from the last 72 h, on the route
-    all_notices = notices()
+    try:
+        all_notices = notices()
+    except Exception:   # 311 feed outage: keep going on flood history, closures and cameras
+        all_notices = []
     nts = _near_route(all_notices, fast["coords"], 45)
     # 2) flood memory under tonight's forecast
     mem = ride._scan(fast, cells, max(six, 0.1), 6, 0.0, 1.0)
     # 3) lane closures active around departure
-    cl = ride.closures_near(fast["coords"], ride.closures(depart[:10], depart, fast["times"][-1]))
+    try:
+        cl = ride.closures_near(fast["coords"], ride.closures(depart[:10], depart, fast["times"][-1]))
+    except Exception:
+        cl = []
 
     flags = {}
     for n in nts:
@@ -128,7 +137,7 @@ def plan(from_q, to_q, depart=None):
     pre = None
     cams = LR.cams_near(route_a, fast)
     try:
-        allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in all_notices]
+        allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in all_notices]   # no second fetch
     except Exception:
         allnt = []
     try:   # live National Weather Service alerts for San Francisco (e.g. a coastal flood warning)
@@ -155,36 +164,55 @@ def plan(from_q, to_q, depart=None):
 GOOD_CAMS = ("TV313", "TV302", "TV301", "TV309", "TV314")  # best first
 
 
+def _photo_near(lat, lon, max_m=400):
+    """A real 311 road photo within max_m of the spot, or None (never a far-away stand-in)."""
+    ph = ride._car_photo("2026-11-18", lat, lon, before=None)
+    return ph if ph and ph["dist_m"] <= max_m else None
+
+
 def pick_sim(p, cams_now, cam_m=1200):
-    """Which flagged spot to simulate and which live camera seeds it (None = use the clearest 311 photo)."""
-    if not p.get("flagged"):
-        return None, None
+    """Which spot to simulate and from which REAL nearby image. Returns (target, cam, photo).
+    Order: clear live cam near a flagged spot > any live cam within 800 m > 311 photo within 400 m >
+    the clear live camera on the route itself. Never an image from across town."""
     meta = {c["id"]: c for c in p.get("cams", [])}
-    good = [dict(meta[c["cam"]], **c) for c in cams_now if c.get("available") and c.get("cam") in GOOD_CAMS and c["cam"] in meta]
+    online = [dict(meta[c["cam"]], **c) for c in cams_now if c.get("available") and c.get("frame") and c.get("cam") in meta]
+    flagged = p.get("flagged", [])[:6]
     best = None
-    for f in p["flagged"][:5]:
-        for c in good:
+    for f in flagged:
+        for c in online:
             d = ride._dist_m((c["lat"], c["lon"]), (f["lat"], f["lon"]))
-            score = GOOD_CAMS.index(c["cam"]) * 500 + d   # a clearer camera beats a slightly closer one
-            if d <= cam_m and (best is None or score < best[3]):
-                best = (f, c, d, score)
+            good = c["cam"] in GOOD_CAMS
+            if d <= (cam_m if good else 800):
+                score = (GOOD_CAMS.index(c["cam"]) * 500 if good else 3000) + d   # a clearer camera beats a slightly closer one
+                if best is None or score < best[3]:
+                    best = (f, c, d, score)
     if best:
-        return best[0], {**best[1], "dist_m": round(best[2])}
-    return p["flagged"][0], None
+        return best[0], {**best[1], "dist_m": round(best[2])}, None
+    for f in flagged:
+        ph = _photo_near(f["lat"], f["lon"])
+        if ph:
+            return f, None, ph
+    # nothing flagged has a nearby image: look ahead through the clearest live camera on the route instead
+    on_route = sorted([c for c in online if c["cam"] in GOOD_CAMS], key=lambda c: GOOD_CAMS.index(c["cam"])) or online
+    if on_route:
+        c = on_route[0]
+        t = {"cell": R._cell(c["lat"], c["lon"]), "lat": c["lat"], "lon": c["lon"], "name": c["name"].split(" -- ")[-1] + " (camera on the route)",
+             "notices": [], "n_storm_days": 0}
+        return t, {**c, "dist_m": 0}, None
+    return None, None, None
 
 
 def simulate(p, cams_now, session_holder):
     """Genie 4 at the most dangerous flagged spot, at the car's ETA; Carbon makes the final call."""
-    target, cam = pick_sim(p, cams_now)
+    target, cam, ph = pick_sim(p, cams_now)
     online = [c for c in cams_now if c.get("available")]
     if not target:
-        return {"skipped": True, "reason": "nothing flagged on this route"}
+        return {"skipped": True, "reason": "no flagged spot with a real nearby image"}
     k = min(range(len(p["fast"]["coords"])), key=lambda i: ride._dist_m(p["fast"]["coords"][i], (target["lat"], target["lon"])))
     eta = p["fast"]["times"][k]
     if cam:
         seed_path, seed = cam["frame"], {"kind": "live camera", "label": cam["name"].split(" -- ")[-1], "t": cam["fetched_at"], "dist_m": cam["dist_m"]}
     else:
-        ph = ride._car_photo("2026-11-18", target["lat"], target["lon"], before=None)
         seed_path, seed = ph["path"], {"kind": "real 311 photo", "label": ph["address"], "t": ph["t"], "dist_m": ph["dist_m"]}
     mm = next((h["mm"] for h in p["forecast"] if h["t"][:13] == eta[:13]), 0)
     from gem.world import GenieSession

@@ -147,3 +147,27 @@ async function riderVoice(text) {
   const b = document.querySelector('.rider .play');
   if (v.path && b) { b.style.display = ''; b.onclick = () => new Audio('/' + v.path + '?t=' + Date.now()).play(); }
 }
+
+// ---------- fleet agent (Antigravity Managed Agent): this car's simulation -> an avoid zone for the whole fleet ----------
+const TOOL_LABEL = {get_cell_history: 'flood history', get_forecast: 'forecast', judge_frame: 're-check image', estimate_fleet_detour: 'fleet detour cost', propose_zone: 'zone for the fleet'};
+async function fleetAgent(stepIdx, inc, alive) {
+  const st = await post('/api/fleet/start', inc); if (st.error) { step(stepIdx, 'done', 'agent unavailable'); return; }
+  step(stepIdx, 'active', 'Antigravity Managed Agent · starting…');
+  for (let k = 0; k < 90 && alive(); k++) {
+    await sleep(1000);
+    const f = await fetch('/api/fleet/status').then(r => r.json()).catch(() => null);
+    if (!f || f.run !== st.run) return;
+    const tools = f.steps.map(s => TOOL_LABEL[s.tool] || s.tool);
+    if (tools.length) step(stepIdx, 'active', 'Agent tools: ' + tools.join(' → '));
+    if (f.done) {
+      const z = f.zone;
+      if (!z || !z.polygon) { step(stepIdx, 'done', f.error ? 'agent unavailable' : 'no zone needed'); return; }
+      legend('lgZone');
+      L.polygon(z.polygon.map(p => p.length === 2 && Math.abs(p[0]) > 90 ? [p[1], p[0]] : p), {color: '#b18cff', weight: 2, fillColor: '#b18cff', fillOpacity: .18, dashArray: '4 4'})
+        .bindTooltip(`Fleet avoid zone · ${hm(z.start)}–${hm(z.end)}`).addTo(lay.fx2 || (lay.fx2 = L.layerGroup().addTo(map)));
+      step(stepIdx, 'done', `Fleet avoids ${esc(title(z.name || ''))} until ${hm(z.end)}`);
+      say(`Fleet agent: ${z.fleet_notice || 'avoid zone sent to every robotaxi'}`);
+      return z;
+    }
+  }
+}

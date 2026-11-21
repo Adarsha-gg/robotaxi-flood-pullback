@@ -61,6 +61,7 @@ body.paused .caption::before{background:var(--cone);box-shadow:none}
 .l-cone{height:5px;background:repeating-linear-gradient(90deg,var(--cone) 0 7px,transparent 7px 10px)}
 .l-fast{height:0;border-top:4px dotted var(--flood)}
 .pin.fast{border-color:var(--flood);color:#ffd5da}
+.l-zone{height:12px;border:2px dashed #b18cff;background:rgba(177,140,255,.18);border-radius:3px}
 .l-flood{width:11px!important;height:11px;border-radius:50%;background:var(--flood);margin-left:4px}
 .pin{background:rgba(12,15,20,.94);border:2px solid var(--water);color:#e2efff;border-radius:9px;padding:4px 10px;font:700 15px Inter;white-space:nowrap}
 .pin.cone{border-color:var(--cone);color:#ffe7cf}

@@ -22,6 +22,7 @@ DATA = os.path.join(ROOT, "data")
 PORT = int(os.environ.get("PORT", 8000))
 LOCK = threading.Lock()
 GENIE = {"session": None, "photo": None}
+FLEET = {"run": 0, "steps": [], "done": True, "zone": None, "error": None}
 RIDE = {}
 LIVE = {}
 TRIP = {}  # one live Genie 4 world at a time (cost cap)
@@ -127,6 +128,11 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path in ("/cam", "/cam.html"):
             self.path = "/web/cam.html"
             return super().do_GET()
+        if u.path == "/api/fleet/status":
+            z = FLEET["zone"] or {}
+            return self.send_json({"run": FLEET["run"], "done": FLEET["done"], "error": FLEET["error"],
+                                   "steps": [{"tool": x.get("tool"), "args": x.get("args")} for x in FLEET["steps"]],
+                                   "zone": {k: z.get(k) for k in ("name", "polygon", "start", "end", "p_flood", "fleet_notice", "reason", "agent_engine", "cells")} if z else None})
         if u.path == "/api/genie/status":
             s = GENIE["session"]
             return self.send_json({"photo": GENIE["photo"], **(s.info() if s else {"status": "idle"})})
@@ -252,9 +258,10 @@ class Handler(SimpleHTTPRequestHandler):
                     return {"cam": c["id"], "name": c["name"], "available": False, "frame": "", "error": str(e)[:120]}
             with ThreadPoolExecutor(6) as ex:
                 TRIP["cams"] = list(ex.map(safe, cams))
-            tgt, cam = trip.pick_sim(TRIP["plan"], TRIP["cams"])
-            return self.send_json({"cams": TRIP["cams"], "sim_target": tgt and tgt["cell"], "sim_cam": cam and cam["cam"],
-                                   "sim_cam_dist": cam and cam["dist_m"]})
+            tgt, cam, ph = trip.pick_sim(TRIP["plan"], TRIP["cams"])
+            return self.send_json({"cams": TRIP["cams"], "sim_target": tgt and tgt["cell"], "sim_target_obj": tgt,
+                                   "sim_cam": cam and cam["cam"], "sim_cam_dist": cam and cam["dist_m"],
+                                   "sim_photo": ph and {"path": ph["path"], "address": ph["address"], "t": ph["t"], "dist_m": ph["dist_m"]}})
         if u.path == "/api/trip/simulate":
             from pipeline import trip
             if GENIE["session"]:
@@ -335,6 +342,26 @@ class Handler(SimpleHTTPRequestHandler):
                 GENIE["session"] = GenieSession(f.read(), prompt, max_seconds=float(b.get("max_seconds", 60))).start()
             GENIE["photo"] = {**photo, "zone": place}
             return self.send_json({"ok": True, "photo": GENIE["photo"]})
+        if u.path == "/api/fleet/start":
+            # Antigravity Managed Agent: takes this car's simulated street and decides what the whole fleet avoids
+            import threading
+            FLEET.update(run=FLEET["run"] + 1, steps=[], done=False, zone=None, error=None)
+            run_id = FLEET["run"]
+
+            def work():
+                from gem.agent import run_incident
+                try:
+                    steps = run_incident(b, on_step=lambda st: FLEET["run"] == run_id and FLEET["steps"].append(st))
+                    if FLEET["run"] == run_id:
+                        FLEET["steps"] = steps
+                        FLEET["zone"] = steps[-1]["result"] if steps and isinstance(steps[-1].get("result"), dict) else None
+                except Exception as e:
+                    FLEET["error"] = f"{type(e).__name__}: {str(e)[:200]}"
+                finally:
+                    if FLEET["run"] == run_id:
+                        FLEET["done"] = True
+            threading.Thread(target=work, daemon=True).start()
+            return self.send_json({"ok": True, "run": run_id})
         if u.path == "/api/voice":
             from gem.voice import synthesize
             out = synthesize(str(b.get("text", ""))[:400], os.path.join(ROOT, "media", "audio", "rider_live.wav"))

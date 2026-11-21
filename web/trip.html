@@ -30,6 +30,7 @@
     <div class="hud legend">
       <span id="lgFast"><i class="l-fast"></i>fastest route (not taken)</span>
       <span id="lgRoute"><i class="l-route"></i>route the car takes</span>
+      <span id="lgZone"><i class="l-zone"></i>fleet avoid zone (agent)</span>
       <span id="lgFlood"><i class="l-flood"></i>flood reported to 311, last 3 days</span>
       <span id="lgWater"><i class="l-water"></i>street that floods in heavy rain</span>
       <span id="lgCone"><i class="l-cone"></i>lane closure now</span>
@@ -88,7 +89,7 @@ async function go() {
   Object.values(lay).forEach(l => l.clearLayers()); $('feed').innerHTML = ''; current = null; say('');
   try {
     // places + fastest route + scan + Carbon's route choice (one server call)
-    initSteps([['Right now', 'Today’s floods, rain, closures'], ['Scan the route', 'Reports, flood history, closures'], ['Cameras', 'Live Caltrans views'], ['Simulate', 'Genie 4 · the spot ahead'], ['Decide', 'Gemini 4 Carbon · no human']]);
+    initSteps([['Right now', 'Today’s floods, rain, closures'], ['Scan the route', 'Reports, flood history, closures'], ['Cameras', 'Live Caltrans views'], ['Simulate', 'Genie 4 · the spot ahead'], ['Decide', 'Gemini 4 Carbon · no human'], ['Fleet agent', 'Antigravity Managed Agent']]);
     step(0, 'active'); progress(0);
     card('Planning', `${esc(from)} → ${esc(to)}`, 'Surface streets only. Robotaxis are off California freeways since Nov 11.');
     state('planning'); say('Finding the fastest route…');
@@ -159,7 +160,7 @@ async function go() {
     if (!alive()) return;
     lay.fx.clearLayers();
     legend('lgRoute');
-    const T = P.flagged.find(f => f.cell === PICK.sim_target) || P.flagged[0];
+    const T = PICK.sim_target_obj || null;   // only a spot we have a real nearby image of
     map.flyToBounds(L.latLngBounds(fast.coords), {...PAD, duration: 1});
     const trail = L.polyline([fast.coords[0]], {color: '#2fd18b', weight: 7, opacity: .95}).addTo(lay.route);
     const car = L.marker(fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
@@ -196,7 +197,9 @@ async function go() {
       card('Simulating with Genie 4', esc(title(T.name)), 'Built from a real image. Played forward to the minute the car would arrive.');
       const sc = CAMS.find(c => c.cam === PICK.sim_cam && c.available && c.frame);
       const etaT = fast.times[kT], fh = P.forecast.find(h => h.t.slice(0, 13) === etaT.slice(0, 13));
-      stageOpen(title(T.name), hm(etaT), sc ? '/' + sc.frame : '', sc ? `Live camera now · ${camName(sc)} · ${hm(P.depart)} · ${PICK.sim_cam_dist} m away` : '',
+      const sp = PICK.sim_photo;
+      stageOpen(title(T.name), hm(etaT), sc ? '/' + sc.frame : sp ? '/' + sp.path : '',
+        sc ? `Live camera now · ${camName(sc)} · ${hm(P.depart)}${PICK.sim_cam_dist ? ' · ' + PICK.sim_cam_dist + ' m away' : ''}` : sp ? `Real 311 photo · ${title(sp.address)} · ${sp.t.slice(5, 10)} · ${sp.dist_m} m away` : '',
         `Live forecast when the car gets there (${hm(etaT)}): ${fh ? fh.mm : 0} mm of rain that hour · ${P.six_h_mm} mm in 6 h`);
       let done = false;
       const simP = post('/api/trip/simulate'); simP.then(() => { done = true; });
@@ -209,7 +212,10 @@ async function go() {
         // Carbon starts deciding the moment the simulation is judged
         const here = fast.coords[idx];
         const DP = post('/api/trip/decide', {here, t: fast.times[idx], index: idx});
-        if (S.seed_path && !sc) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
+        const v0 = S.verdict || {};
+        fleetAgent(5, {cell: T.cell, lat: T.lat, lon: T.lon, t: fast.times[idx].slice(0, 16), date: fast.times[idx].slice(0, 10),
+          flooded_p: v0.lane_covered, depth_label: v0.depth_label, source: 'genie4_simulation'}, alive);
+        if (S.seed_path && !sc && !sp) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
         stageResult(S.frame, hm(S.eta), S.verdict, S.total_s);
         await sleep(3600);
         await stageClose();
@@ -246,7 +252,7 @@ async function go() {
     }
     if (!alive()) return;
     lay.fx.clearLayers();
-    progress(1); for (let k = 0; k < 5; k++) { const e = $('st' + k); if (e && !e.classList.contains('done')) step(k, 'done'); }
+    progress(1); for (let k = 0; k < (T ? 5 : 6); k++) { const e = $('st' + k); if (e && !e.classList.contains('done')) step(k, 'done', k >= 3 && !T ? 'No flagged spot with a nearby image' : null); }
     state('arrived'); say(`Arrived ${hm(R.times.at(-1))}${D && D.action === 'reroute' ? ' · never stopped' : ''}`);
   } catch (err) {
     card('Trip error', esc(err.message || String(err))); state('error');

@@ -329,9 +329,20 @@ DECISION_SCHEMA = {
 }
 
 
+SIM_POLICY = (
+    "The Genie 4 simulation judged by Decision 1 is the best estimate of the water THIS car will meet when it gets "
+    "there. Reroute only if it shows a real risk to the car: action 'avoid'; or water across at least half the lane "
+    "(lane_covered >= 0.5) AND water reaching the tire sidewall (p_tire_or_worse >= 0.3); or a closed lane "
+    "(lane_closed >= 0.5). Flood history, nearby 311 reports and the forecast are why the car looked, not by "
+    "themselves a reason to reroute. If the simulation shows puddles or only a wet road, keep the route and say "
+    "plainly that the car checked and the street is passable.")
+
+
 def decide(ctx):
     """Gemini 4 Carbon makes the call autonomously (no human approval).
     Uses Lane G's hardened gem.explain.decide (9 s timeout, never raises); falls back to the direct call."""
+    if isinstance(ctx, dict) and ctx.get("genie4_simulation_judged_by_decision1"):
+        ctx = {"decision_policy": SIM_POLICY, **ctx}
     try:
         from gem.explain import decide as hardened
         out = hardened(ctx, timeout_s=8.0)

@@ -21,6 +21,7 @@
     <div class="hud legend">
       <span id="lgFast"><i class="l-fast"></i>fastest route (not taken)</span>
       <span id="lgRoute"><i class="l-route"></i>route the car takes</span>
+      <span id="lgZone"><i class="l-zone"></i>fleet avoid zone (agent)</span>
       <span id="lgWater"><i class="l-water"></i>street that floods in storms</span>
       <span id="lgCone"><i class="l-cone"></i>lane closure</span>
       <span id="lgFlood"><i class="l-flood"></i>flood reported to 311</span>
@@ -76,7 +77,7 @@ async function start() {
   const myId = ++runId; const alive = () => running && runId === myId;
   running = true; SPEED = 1; $('feed').innerHTML = ''; Object.values(lay).forEach(l => l.clearLayers());
   // 1. before pickup
-  initSteps([['Live reports', 'What 311 already knows'], ['Route', 'Pick a route before pickup'], ['Forecast', 'Re-check while driving'], ['Simulate', 'Genie 4 · the street ahead'], ['Decide', 'Gemini 4 Carbon · no human']]);
+  initSteps([['Live reports', 'What 311 already knows'], ['Route', 'Pick a route before pickup'], ['Forecast', 'Re-check while driving'], ['Simulate', 'Genie 4 · the street ahead'], ['Decide', 'Gemini 4 Carbon · no human'], ['Fleet agent', 'Antigravity Managed Agent']]);
   step(0, 'active'); progress(0);
   card('Before pickup · 09:50', 'Checking the fastest route…', 'Live 311 flood reports, the forecast, and every street that has flooded before.');
   state('checking route');
@@ -165,6 +166,9 @@ async function start() {
   // Carbon starts deciding the moment the simulation is judged, while the result is on screen
   const here = [carM.getLatLng().lat, carM.getLatLng().lng];
   const RRp = post('/api/ride/reroute', {here, t: `2026-11-18T${fmt(clockM)}:00`, index: idxNow});
+  if (W) { const v0 = (sim && sim.verdict) || {};
+    fleetAgent(5, {cell: W.cell, lat: W.lat, lon: W.lon, t: `2026-11-18T${fmt(clockM)}`, date: '2026-11-18',
+      flooded_p: v0.lane_covered, depth_label: v0.depth_label, source: 'genie4_simulation'}, () => runId === myId); }
   if (W && sim && !sim.error) {
     stageResult(sim.frame, hm(W.eta), sim.verdict, sim.total_s);
     await sleep(3600);
@@ -189,7 +193,7 @@ async function start() {
   x5.innerHTML = why(D2); riderVoice(D2.rider_message);
   step(4, 'done', esc(D2.headline)); T_END = toMin(B.times.at(-1));
   etaLine(`<b>ETA ${hm(B.times.at(-1))}</b>${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min after reroute`);
-  say(D2.action === 'reroute' ? `Rerouted around ${title(W ? W.name : 'the hazard')}. The car never stopped.` : 'Kept the route');
+  say(D2.action === 'reroute' ? `Rerouted around ${title(W ? W.name : 'the hazard')}. The car never stopped.` : `Checked ${title(W ? W.name : 'the street')}: passable. Keeping the route.`);
   SPEED = 1.6; state('driving');
   await drive(B, 0, B.coords.length - 1, null, null, myId);
   if (!alive()) return;

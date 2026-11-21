@@ -102,6 +102,26 @@ def _rects(cells, pad=0.00015):
 
 
 def _valhalla(frm, to, exclude_cells, no_freeways=False):
+    """Valhalla with one retry; if the public server is down, fall back to OSRM's alternatives and take the one
+    that crosses the fewest excluded cells (the demo must never die on a routing outage)."""
+    err = None
+    for _ in range(2):
+        try:
+            return _valhalla_once(frm, to, exclude_cells, no_freeways)
+        except Exception as e:
+            err = e
+            if "circumference" in str(e) or "400" in str(e):
+                raise   # a bad exclusion set: let the caller shrink it
+    try:
+        alts = _osrm(frm, to)
+        ex = set(exclude_cells or [])
+        best = min(alts, key=lambda r: (len({_cell(la, lo) for la, lo in _densify(r["coords"])} & ex), r["min"]))
+        return {**best, "router": "osrm-fallback"}
+    except Exception:
+        raise err
+
+
+def _valhalla_once(frm, to, exclude_cells, no_freeways=False):
     body = {"locations": [{"lat": frm[0], "lon": frm[1]}, {"lat": to[0], "lon": to[1]}],
             "costing": "auto", "units": "kilometers"}
     if no_freeways:  # robotaxis are off California freeways since 2026-11-17 (DMV)
