@@ -209,6 +209,7 @@ video, #still { width: 100%; height: 100%; object-fit: cover; display: block; }
       <div class="seg" id="srcSeg">
         <button data-v="cam" class="on">Live Webcam</button>
         <button data-v="photo">Real 311 Photo</button>
+        <button data-v="waymo">Real Waymo Camera</button>
       </div>
     </div>
 
@@ -288,16 +289,23 @@ function photo() { return photos[+$('pos').value] || photos[0]; }
 function updateHud() {
   const p = photo();
   $('hudCar').textContent = `CAM-FRONT · ${$('car').value}`;
-  $('hudSrc').textContent = srcMode === 'photo' ? '311 STREET PHOTO' : 'LIVE WEBCAM';
-  if (p) $('hudLoc').textContent = `${p.address} · ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} (${p.t.slice(11, 16)})`;
+  $('hudSrc').textContent = srcMode === 'photo' ? '311 STREET PHOTO' : srcMode === 'waymo' ? 'WAYMO OPEN DATASET · REAL SF RAIN DRIVE' : 'LIVE WEBCAM';
+  if (srcMode === 'waymo') $('hudLoc').textContent = 'San Francisco · exact location withheld by the dataset · verdicts mapped at the selected position';
+  else if (p) $('hudLoc').textContent = `${p.address} · ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} (${p.t.slice(11, 16)})`;
 }
 
+// Real Waymo front-camera frames: Waymo Open Dataset v2.0.1, segment 3132521568089292927 (SF, rain, day), 10 fps
+let wodTimer = null, wodI = 0;
 function showSource() {
-  const usePhoto = srcMode === 'photo';
+  clearInterval(wodTimer);
+  const usePhoto = srcMode === 'photo' || srcMode === 'waymo';
+  if (srcMode === 'waymo') {
+    wodTimer = setInterval(() => { wodI = (wodI + 1) % 199; $('still').src = `/media/frames/waymo/front_${String(wodI).padStart(3, '0')}.jpg`; }, 100);
+  }
   document.querySelectorAll('#srcSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === srcMode));
   $('video').style.display = usePhoto ? 'none' : 'block';
   $('still').style.display = usePhoto ? 'block' : 'none';
-  if (usePhoto && photo()) $('still').src = '/' + photo().path;
+  if (srcMode === 'photo' && photo()) $('still').src = '/' + photo().path;
   updateHud();
 }
 
@@ -327,7 +335,7 @@ $('car').onchange = updateHud;
 
 async function frameB64() {
   const cv = $('cv'), g = cv.getContext('2d');
-  const el = srcMode === 'photo' ? $('still') : $('video');
+  const el = srcMode === 'video' || srcMode === 'cam' ? $('video') : $('still');
   if (el.tagName === 'IMG' && !el.complete) await new Promise(r => { el.onload = r; });
   const w = el.videoWidth || el.naturalWidth, h = el.videoHeight || el.naturalHeight;
   if (!w || !h) throw new Error('Camera frame not ready yet — wait 1s or switch to Real 311 Photo.');
