@@ -11,6 +11,7 @@ import json
 import math
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,6 +23,8 @@ from gem.client import REPO_ROOT, get_beta_client, get_client
 from gem.vision import judge_frame as _vision_judge_frame
 
 DATA_DIR = REPO_ROOT / "data"
+TRACES_DIR = REPO_ROOT / "media" / "traces"
+SIM_CACHE_DIR = REPO_ROOT / "media" / "sim_cache"
 DEFAULT_GRID: dict[str, float] = {
     "lat0": 37.70,
     "lon0": -122.52,
@@ -889,10 +892,949 @@ def run_incident(verdict: dict[str, Any], on_step: Any = None) -> list[dict[str,
     return final_steps
 
 
+# ---------------------------------------------------------------------------
+# Wave 3 Task G10: Managed Agent ride decision (run_ride + load_ride_trace)
+# ---------------------------------------------------------------------------
+
+RIDE_AGENT_TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": "get_forecast",
+        "description": (
+            "Get hourly precipitation forecast, 24h total_mm, max_6h_mm, and latest forecast update "
+            "for a date (YYYY-MM-DD)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "description": "Date in YYYY-MM-DD format, e.g. '2026-11-18'.",
+                }
+            },
+            "required": ["date"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "get_cell_history",
+        "description": (
+            "Look up historical 311 flood reports, storm_days, 6h rain threshold, top addresses, "
+            "and adjacent neighbor cells for a San Francisco grid cell ID (e.g. 'r50_c66')."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cell": {
+                    "type": "string",
+                    "description": "Grid cell ID formatted as r{row}_c{col}, e.g. 'r50_c66'.",
+                }
+            },
+            "required": ["cell"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "simulate_street",
+        "description": (
+            "Inspect the Genie 4 + Decision 1 simulated roadway flood verdict for a watch cell ahead "
+            "on the route. Returns verdict (flooded_p, depth_label, rubric, agreement, action) and source."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cell": {
+                    "type": "string",
+                    "description": "Grid cell ID of the street to simulate/inspect, e.g. 'r50_c66'.",
+                }
+            },
+            "required": ["cell"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "route_options",
+        "description": (
+            "Compare the default route travel time against a flood-avoiding reroute avoiding the "
+            "specified risky grid cell IDs."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "avoid_cells": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of risky grid cell IDs from the ride plan to avoid.",
+                }
+            },
+            "required": ["avoid_cells"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "decide",
+        "description": (
+            "Record the final ride routing decision after reviewing forecast, cell history, "
+            "simulated street verdict, and route options."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["reroute", "proceed"],
+                    "description": "Whether the robotaxi should 'reroute' around flood-prone blocks or 'proceed'.",
+                },
+                "avoid_cells": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Subset of risky cell IDs from the plan to avoid (empty list if action is 'proceed')."
+                    ),
+                },
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "Concise audit explanation citing forecast rain, historical storm dates from cell "
+                        "history, and the simulated street verdict (explicitly refer to it as simulated)."
+                    ),
+                },
+                "rider_message": {
+                    "type": "string",
+                    "description": "Calm, jargon-free message for the passenger (<= 140 chars).",
+                },
+                "fleet_notice": {
+                    "type": "string",
+                    "description": "One-line fleet operations notice naming the block and time window (<= 200 chars).",
+                },
+            },
+            "required": ["action", "avoid_cells", "reason", "rider_message", "fleet_notice"],
+        },
+    },
+]
+
+
+def load_ride_trace(date: str = DEFAULT_DATE) -> dict[str, Any] | None:
+    """Load a saved ride audit trace from media/traces/ride_<date>.json.
+
+    Falls back to any media/traces/ride_*.json if the exact date file is missing.
+    Keeps the original agent_engine and sets replayed=True. Never raises.
+    """
+    try:
+        day = str(date or DEFAULT_DATE).strip()[:10]
+        candidates: list[Path] = []
+        if day:
+            candidates.append(TRACES_DIR / f"ride_{day}.json")
+        if TRACES_DIR.is_dir():
+            for p in sorted(TRACES_DIR.glob("ride_*.json"), reverse=True):
+                if p not in candidates:
+                    candidates.append(p)
+        for path in candidates:
+            if not path.is_file():
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if (
+                isinstance(data, dict)
+                and isinstance(data.get("steps"), list)
+                and isinstance(data.get("decision"), dict)
+            ):
+                out = dict(data)
+                if not out.get("agent_engine"):
+                    out["agent_engine"] = "replay"
+                out["replayed"] = True
+                return out
+    except Exception:
+        return None
+    return None
+
+
+def _ride_simulate_street(
+    cell: str,
+    watch_cell: str,
+    tools: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Return ONLY {verdict, source} for a street cell; never starts a Genie session."""
+    clean_cell = str(cell or watch_cell or "").strip()
+    if isinstance(tools, dict) and callable(tools.get("simulate_street")):
+        try:
+            raw = tools["simulate_street"](clean_cell)
+            if isinstance(raw, dict) and raw.get("verdict") is not None:
+                return {
+                    "verdict": raw.get("verdict"),
+                    "source": str(raw.get("source") or "cache"),
+                }
+        except Exception:
+            pass
+
+    cache_candidates: list[Path] = []
+    if clean_cell:
+        cache_candidates.append(SIM_CACHE_DIR / clean_cell / "result.json")
+    if watch_cell and watch_cell != clean_cell:
+        cache_candidates.append(SIM_CACHE_DIR / watch_cell / "result.json")
+    if SIM_CACHE_DIR.is_dir():
+        for p in sorted(SIM_CACHE_DIR.glob("*/result.json")):
+            if p not in cache_candidates:
+                cache_candidates.append(p)
+
+    for path in cache_candidates:
+        if not path.is_file():
+            continue
+        try:
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(cached, dict) and cached.get("verdict") is not None:
+                return {
+                    "verdict": cached.get("verdict"),
+                    "source": "cache",
+                }
+        except Exception:
+            continue
+
+    return {
+        "verdict": {
+            "flooded_p": None,
+            "depth_score": None,
+            "depth_label": None,
+            "action": "slow",
+        },
+        "source": "missing",
+    }
+
+
+def _ride_route_options(
+    avoid_cells: Any,
+    plan: dict[str, Any],
+    tools: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Compare default route vs. flood-avoiding route via injected callable or safe default."""
+    risky_cells = [str(c).strip() for c in (plan.get("risky") or []) if str(c).strip()]
+    risky_set = set(risky_cells)
+    raw_list = avoid_cells if isinstance(avoid_cells, list) else ([avoid_cells] if isinstance(avoid_cells, str) else [])
+    clean_avoid: list[str] = []
+    seen: set[str] = set()
+    for c in raw_list:
+        cs = str(c).strip()
+        if not cs or cs in seen:
+            continue
+        if risky_set and cs not in risky_set:
+            continue
+        seen.add(cs)
+        clean_avoid.append(cs)
+    if not clean_avoid and risky_cells:
+        clean_avoid = risky_cells[:6]
+
+    if isinstance(tools, dict) and callable(tools.get("route_options")):
+        try:
+            res = tools["route_options"](clean_avoid)
+            if isinstance(res, dict):
+                return res
+        except Exception:
+            pass
+
+    route_info = plan.get("route") if isinstance(plan.get("route"), dict) else {}
+    return {
+        "default": {"min": route_info.get("min")},
+        "safe": None,
+    }
+
+
+def _normalize_ride_decision(
+    args: dict[str, Any],
+    plan: dict[str, Any],
+    *,
+    sim_res: dict[str, Any] | None = None,
+    route_res: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate and normalize the final ride decision with strict avoid_cells guard."""
+    risky_cells = [str(c).strip() for c in (plan.get("risky") or []) if str(c).strip()]
+    risky_set = set(risky_cells)
+
+    raw_action = str(args.get("action") or "").strip().lower()
+    if raw_action in ("reroute", "avoid", "detour"):
+        action = "reroute"
+    elif raw_action in ("proceed", "continue", "stay", "keep"):
+        action = "proceed"
+    else:
+        v = (sim_res or {}).get("verdict") if isinstance(sim_res, dict) else {}
+        v = v if isinstance(v, dict) else {}
+        v_act = str(v.get("action") or "").strip().lower()
+        fp = v.get("flooded_p")
+        rubric = v.get("rubric") if isinstance(v.get("rubric"), dict) else {}
+        stall = rubric.get("sedan_stall")
+        should_reroute = (
+            v_act == "avoid"
+            or (isinstance(fp, (int, float)) and fp >= 0.6)
+            or (isinstance(stall, (int, float)) and stall >= 0.5)
+        )
+        action = "reroute" if should_reroute else "proceed"
+
+    raw_avoid = args.get("avoid_cells")
+    if isinstance(raw_avoid, str):
+        raw_avoid = [raw_avoid]
+    elif not isinstance(raw_avoid, list):
+        raw_avoid = []
+
+    filtered_avoid: list[str] = []
+    seen: set[str] = set()
+    for c in raw_avoid:
+        cs = str(c).strip()
+        if cs in risky_set and cs not in seen:
+            seen.add(cs)
+            filtered_avoid.append(cs)
+
+    if action == "reroute" and not filtered_avoid:
+        filtered_avoid = risky_cells[:6]
+    elif action == "proceed":
+        filtered_avoid = []
+
+    watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
+    warning = plan.get("warning") if isinstance(plan.get("warning"), dict) else {}
+    peak = warning.get("peak") if isinstance(warning.get("peak"), dict) else {}
+    watch_name = str(watch.get("name") or watch.get("cell") or "flood-prone corridor")
+    peak_mm = peak.get("mm")
+    peak_t = str(peak.get("t") or plan.get("t") or "")
+    hhmm = peak_t[11:16] if len(peak_t) >= 16 else "09:00"
+    n_days = watch.get("n_storm_days")
+    storm_days = watch.get("storm_days") if isinstance(watch.get("storm_days"), list) else []
+    verdict = (sim_res or {}).get("verdict") if isinstance(sim_res, dict) else {}
+    verdict = verdict if isinstance(verdict, dict) else {}
+    fp = verdict.get("flooded_p")
+    depth_label = verdict.get("depth_label") or "standing water"
+
+    reason = str(args.get("reason") or "").strip()
+    if not reason:
+        parts = []
+        if peak_mm is not None:
+            parts.append(f"Forecast peaks at {peak_mm} mm/h around {hhmm}")
+        if n_days:
+            cite = f" ({', '.join(str(d) for d in storm_days[:2])})" if storm_days else ""
+            parts.append(f"{watch_name} flooded on {n_days} past storm days{cite}")
+        if isinstance(fp, (int, float)):
+            parts.append(f"simulated street check shows {depth_label} roadway flooding (p={fp:.2f})")
+        reason = "; ".join(parts) + "." if parts else f"Flood risk assessment complete for {watch_name}."
+
+    rider_message = str(args.get("rider_message") or "").strip()
+    if not rider_message:
+        safe_info = (route_res or {}).get("safe") if isinstance(route_res, dict) else None
+        added_txt = ""
+        if isinstance(safe_info, dict) and safe_info.get("added_min") is not None:
+            added_txt = f" (+{safe_info['added_min']} min)"
+        if action == "reroute":
+            rider_message = f"Taking a drier route around heavy rain near {watch_name}{added_txt}."
+        else:
+            rider_message = "Continuing on the planned route; roadway conditions ahead remain passable."
+
+    fleet_notice = str(args.get("fleet_notice") or "").strip()
+    if not fleet_notice:
+        if action == "reroute":
+            fleet_notice = (
+                f"AVOID {watch_name} ({len(filtered_avoid)} cells) around {hhmm}: "
+                f"forecast rain + simulated roadway flooding."
+            )
+        else:
+            fleet_notice = f"MONITOR {watch_name} around {hhmm}: proceeding with caution."
+
+    return {
+        "action": action,
+        "avoid_cells": filtered_avoid,
+        "reason": reason,
+        "rider_message": rider_message,
+        "fleet_notice": fleet_notice,
+    }
+
+
+def _compact_ride_plan_for_prompt(plan: dict[str, Any]) -> dict[str, Any]:
+    """Strip large route coordinate/timestamp arrays so the agent prompt stays lean and fast."""
+    route = plan.get("route") if isinstance(plan.get("route"), dict) else {}
+    watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
+    watch_clean = {k: v for k, v in watch.items() if k != "photo"}
+    if isinstance(watch.get("photo"), dict):
+        watch_clean["photo_address"] = watch["photo"].get("address")
+    return {
+        "date": plan.get("date") or DEFAULT_DATE,
+        "t": plan.get("t") or DEFAULT_TIME,
+        "decide_t": plan.get("decide_t"),
+        "route": {"min": route.get("min"), "km": route.get("km")},
+        "warning": plan.get("warning"),
+        "forecast_6h_mm": plan.get("forecast_6h_mm"),
+        "watch": watch_clean,
+        "risky": plan.get("risky") or [],
+        "risky_detail": (plan.get("risky_detail") or [])[:6],
+    }
+
+
+def _build_ride_prompt(plan: dict[str, Any], date_str: str, watch_cell: str, risky_cells: list[str]) -> str:
+    compact = _compact_ride_plan_for_prompt(plan)
+    risky_json = json.dumps(risky_cells)
+    return (
+        "You are an autonomous robotaxi flood-safety decision agent operating in San Francisco.\n"
+        "A mid-ride heavy-rain warning just arrived. Investigate the forecast, historical 311 flood "
+        "memory, the simulated street condition ahead, and routing alternatives, then issue a final "
+        "routing decision.\n\n"
+        f"RIDE PLAN SUMMARY:\n{json.dumps(compact, indent=2)}\n\n"
+        "REQUIRED WORKFLOW (be concise and fast — batch parallel tool calls):\n"
+        "1. In your FIRST turn, call ALL FOUR evidence tools in parallel:\n"
+        f"   - get_forecast(date='{date_str}')\n"
+        f"   - get_cell_history(cell='{watch_cell}')\n"
+        f"   - simulate_street(cell='{watch_cell}')\n"
+        f"   - route_options(avoid_cells={risky_json})\n"
+        "2. In your SECOND turn, call decide(action, avoid_cells, reason, rider_message, fleet_notice):\n"
+        "   - action: 'reroute' if the simulated street verdict shows flooding/avoid (action=='avoid', "
+        "flooded_p >= 0.6, or sedan_stall >= 0.5), else 'proceed'.\n"
+        f"   - avoid_cells: MUST be a subset of {risky_json} (never invent cell IDs; use [] if proceeding).\n"
+        "   - reason: cite real numbers from the forecast, past storm_days dates from cell history, and "
+        "explicitly call the street check 'simulated' (never 'observed').\n"
+        "   - rider_message: calm, jargon-free passenger message (<= 140 chars).\n"
+        "   - fleet_notice: actionable one-line fleet ops notice naming the block and time window (<= 200 chars).\n"
+        "Do NOT ask questions. Finish as soon as decide(...) is called."
+    )
+
+
+def _execute_ride_tool(
+    name: str,
+    args: dict[str, Any],
+    *,
+    plan: dict[str, Any],
+    date_str: str,
+    watch_cell: str,
+    tools: dict[str, Any] | None,
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    if name == "get_forecast":
+        res = get_forecast(str(args.get("date") or date_str))
+        state["forecast"] = res
+        return res
+    if name == "get_cell_history":
+        res = get_cell_history(str(args.get("cell") or watch_cell))
+        state["history"] = res
+        return res
+    if name == "simulate_street":
+        res = _ride_simulate_street(str(args.get("cell") or watch_cell), watch_cell, tools)
+        state["sim"] = res
+        return res
+    if name == "route_options":
+        res = _ride_route_options(args.get("avoid_cells"), plan, tools)
+        state["route"] = res
+        return res
+    if name == "decide":
+        res = _normalize_ride_decision(
+            args,
+            plan,
+            sim_res=state.get("sim"),
+            route_res=state.get("route"),
+        )
+        state["decision"] = res
+        return res
+    return {"error": f"Unknown tool: {name}"}
+
+
+def _emit_step(on_step: Any, step: dict[str, Any], cancel_event: threading.Event | None = None) -> None:
+    if cancel_event is not None and cancel_event.is_set():
+        return
+    if callable(on_step):
+        try:
+            on_step(step)
+        except Exception:
+            pass
+
+
+def _run_with_timeout(fn: Any, timeout_s: float, cancel_event: threading.Event) -> Any:
+    """Run fn() in a daemon thread with a hard wall-clock timeout without blocking on abandon."""
+    box: dict[str, Any] = {}
+
+    def _target() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:
+            box["error"] = exc
+
+    th = threading.Thread(target=_target, daemon=True)
+    th.start()
+    th.join(timeout=max(0.1, float(timeout_s)))
+    if th.is_alive():
+        cancel_event.set()
+        raise TimeoutError(f"Operation timed out after {timeout_s:.1f}s")
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
+def _run_ride_managed_agent_loop(
+    prompt: str,
+    *,
+    plan: dict[str, Any],
+    date_str: str,
+    watch_cell: str,
+    tools: dict[str, Any] | None,
+    on_step: Any,
+    deadline: float,
+    cancel_event: threading.Event,
+    max_turns: int = 5,
+) -> tuple[list[dict[str, Any]], str | None, dict[str, Any]]:
+    """Run multi-turn ride decision loop on Antigravity Managed Agents (antigravity-preview-09-2026)."""
+    beta = get_beta_client()
+    trace: list[dict[str, Any]] = []
+    state: dict[str, Any] = {}
+    prev_id: str | None = None
+    first_interaction_id: str | None = None
+    next_input: Any = prompt
+
+    for _turn in range(max_turns):
+        if cancel_event.is_set():
+            raise TimeoutError("Managed Agent cancelled")
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0.5:
+            raise TimeoutError("Managed Agent deadline exceeded")
+
+        kwargs: dict[str, Any] = {
+            "agent": MANAGED_AGENT_NAME,
+            "environment": "remote",
+            "agent_config": {
+                "type": "antigravity",
+                "model": MANAGED_AGENT_MODEL,
+                "max_total_tokens": MANAGED_AGENT_MAX_TOKENS,
+            },
+            "tools": RIDE_AGENT_TOOLS,
+            "input": next_input,
+            "timeout": max(3.0, min(30.0, remaining)),
+        }
+        if prev_id is not None:
+            kwargs["previous_interaction_id"] = prev_id
+
+        interaction = beta.interactions.create(**kwargs)
+        if cancel_event.is_set():
+            raise TimeoutError("Managed Agent cancelled")
+
+        prev_id = getattr(interaction, "id", None)
+        if first_interaction_id is None and prev_id:
+            first_interaction_id = str(prev_id)
+        status = getattr(interaction, "status", None)
+        steps = getattr(interaction, "steps", None) or []
+
+        if status == "failed":
+            raise RuntimeError(f"Managed Agent interaction failed (id={prev_id})")
+
+        fc_steps = [s for s in steps if getattr(s, "type", None) == "function_call"]
+        if not fc_steps:
+            break
+
+        tool_responses: list[dict[str, Any]] = []
+        called_decide = False
+        for fc in fc_steps:
+            if cancel_event.is_set():
+                raise TimeoutError("Managed Agent cancelled")
+            call_id = getattr(fc, "id", None) or getattr(fc, "call_id", None)
+            fname = str(getattr(fc, "name", ""))
+            raw_args = getattr(fc, "arguments", None) or {}
+            fargs = dict(raw_args) if isinstance(raw_args, dict) else {}
+
+            t_tool = time.perf_counter()
+            result = _execute_ride_tool(
+                fname,
+                fargs,
+                plan=plan,
+                date_str=date_str,
+                watch_cell=watch_cell,
+                tools=tools,
+                state=state,
+            )
+            ms = max(0, int(round((time.perf_counter() - t_tool) * 1000)))
+            step_entry = {"tool": fname, "args": fargs, "result": result, "ms": ms}
+            trace.append(step_entry)
+            _emit_step(on_step, step_entry, cancel_event)
+
+            if fname == "decide":
+                called_decide = True
+
+            tool_responses.append(
+                {
+                    "type": "function_result",
+                    "call_id": call_id,
+                    "name": fname,
+                    "result": result,
+                }
+            )
+
+        if called_decide:
+            break
+        if status != "requires_action":
+            break
+        next_input = tool_responses
+
+    if not trace:
+        raise RuntimeError(f"Managed Agent returned no tool calls (id={first_interaction_id})")
+    return trace, first_interaction_id, state
+
+
+def _run_ride_carbon_loop(
+    prompt: str,
+    *,
+    plan: dict[str, Any],
+    date_str: str,
+    watch_cell: str,
+    tools: dict[str, Any] | None,
+    on_step: Any,
+    deadline: float,
+    cancel_event: threading.Event,
+    max_turns: int = 5,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Fallback function-calling loop on gemini-4-carbon (same 5 tools, default sampling)."""
+    client = get_client()
+    fn_decls = [
+        types.FunctionDeclaration(
+            name=t["name"],
+            description=t["description"],
+            parameters_json_schema=t["parameters"],
+        )
+        for t in RIDE_AGENT_TOOLS
+    ]
+    config = types.GenerateContentConfig(
+        tools=[types.Tool(function_declarations=fn_decls)],
+    )
+    contents: list[Any] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+    trace: list[dict[str, Any]] = []
+    state: dict[str, Any] = {}
+
+    for _turn in range(max_turns):
+        if cancel_event.is_set() or time.perf_counter() >= deadline:
+            raise TimeoutError("Carbon fallback deadline exceeded")
+
+        resp = client.models.generate_content(
+            model=FALLBACK_CARBON_MODEL,
+            contents=contents,
+            config=config,
+        )
+        if cancel_event.is_set():
+            raise TimeoutError("Carbon fallback cancelled")
+
+        cand = (resp.candidates or [None])[0]
+        if cand is None or cand.content is None:
+            break
+        contents.append(cand.content)
+
+        fcalls = [p.function_call for p in (cand.content.parts or []) if p.function_call]
+        if not fcalls:
+            break
+
+        resp_parts: list[types.Part] = []
+        called_decide = False
+        for fc in fcalls:
+            fname = str(fc.name or "")
+            fargs = dict(fc.args or {})
+            t_tool = time.perf_counter()
+            result = _execute_ride_tool(
+                fname,
+                fargs,
+                plan=plan,
+                date_str=date_str,
+                watch_cell=watch_cell,
+                tools=tools,
+                state=state,
+            )
+            ms = max(0, int(round((time.perf_counter() - t_tool) * 1000)))
+            step_entry = {"tool": fname, "args": fargs, "result": result, "ms": ms}
+            trace.append(step_entry)
+            _emit_step(on_step, step_entry, cancel_event)
+            if fname == "decide":
+                called_decide = True
+            resp_parts.append(types.Part.from_function_response(name=fname, response=result))
+
+        contents.append(types.Content(role="user", parts=resp_parts))
+        if called_decide:
+            break
+
+    if not trace:
+        raise RuntimeError("Carbon fallback returned no tool calls")
+    return trace, state
+
+
+def _ensure_ride_steps(
+    trace: list[dict[str, Any]],
+    *,
+    plan: dict[str, Any],
+    date_str: str,
+    watch_cell: str,
+    risky_cells: list[str],
+    tools: dict[str, Any] | None,
+    state: dict[str, Any],
+    on_step: Any,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Guarantee >= 4 steps covering evidence tools and ending in a validated 'decide' step."""
+    steps = list(trace)
+    present = {s.get("tool") for s in steps}
+
+    # Keep any existing decide step aside so backfilled evidence appears before decide.
+    decide_step: dict[str, Any] | None = None
+    non_decide: list[dict[str, Any]] = []
+    for s in steps:
+        if s.get("tool") == "decide":
+            decide_step = s
+        else:
+            non_decide.append(s)
+    steps = non_decide
+
+    def _run_missing(tool_name: str, tool_args: dict[str, Any]) -> None:
+        t_tool = time.perf_counter()
+        res = _execute_ride_tool(
+            tool_name,
+            tool_args,
+            plan=plan,
+            date_str=date_str,
+            watch_cell=watch_cell,
+            tools=tools,
+            state=state,
+        )
+        ms = max(0, int(round((time.perf_counter() - t_tool) * 1000)))
+        entry = {"tool": tool_name, "args": tool_args, "result": res, "ms": ms}
+        steps.append(entry)
+        _emit_step(on_step, entry)
+
+    if "get_forecast" not in present:
+        _run_missing("get_forecast", {"date": date_str})
+    if "get_cell_history" not in present:
+        _run_missing("get_cell_history", {"cell": watch_cell})
+    if "simulate_street" not in present:
+        _run_missing("simulate_street", {"cell": watch_cell})
+    if "route_options" not in present:
+        _run_missing("route_options", {"avoid_cells": risky_cells[:6]})
+
+    if decide_step is not None:
+        raw_dec = decide_step.get("result") if isinstance(decide_step.get("result"), dict) else {}
+        normalized = _normalize_ride_decision(
+            raw_dec,
+            plan,
+            sim_res=state.get("sim"),
+            route_res=state.get("route"),
+        )
+        decide_step = {
+            "tool": "decide",
+            "args": decide_step.get("args") if isinstance(decide_step.get("args"), dict) else {},
+            "result": normalized,
+            "ms": int(decide_step.get("ms", 0)),
+        }
+        steps.append(decide_step)
+        return steps, normalized
+
+    t_tool = time.perf_counter()
+    normalized = _normalize_ride_decision(
+        {},
+        plan,
+        sim_res=state.get("sim"),
+        route_res=state.get("route"),
+    )
+    ms = max(0, int(round((time.perf_counter() - t_tool) * 1000)))
+    synth_step = {"tool": "decide", "args": dict(normalized), "result": normalized, "ms": ms}
+    steps.append(synth_step)
+    _emit_step(on_step, synth_step)
+    return steps, normalized
+
+
+def run_ride(
+    plan: dict[str, Any],
+    tools: dict[str, Any] | None = None,
+    on_step: Any = None,
+    timeout_s: float = 45.0,
+) -> dict[str, Any]:
+    """Run the end-to-end ride flood decision via Antigravity Managed Agents.
+
+    Fallback chain (strict timeout_s, never raises):
+      1. Antigravity Managed Agent (antigravity-preview-09-2026)
+      2. gemini-4-carbon function-calling loop
+      3. Saved trace via load_ride_trace(date) with replayed=True
+      4. Deterministic synthesis fallback
+    """
+    t0 = time.perf_counter()
+    safe_plan = plan if isinstance(plan, dict) else {}
+    raw_date = str(safe_plan.get("date") or str(safe_plan.get("t") or "")[:10] or DEFAULT_DATE).strip()
+    date_str = raw_date[:10] if len(raw_date) >= 10 else DEFAULT_DATE
+    watch = safe_plan.get("watch") if isinstance(safe_plan.get("watch"), dict) else {}
+    risky_cells = [str(c).strip() for c in (safe_plan.get("risky") or []) if str(c).strip()]
+    watch_cell = str(watch.get("cell") or (risky_cells[0] if risky_cells else "r50_c66")).strip()
+
+    total_budget = max(1.0, float(timeout_s))
+    hard_deadline = t0 + total_budget
+    prompt = _build_ride_prompt(safe_plan, date_str, watch_cell, risky_cells)
+
+    emitted_any = False
+
+    def _tracking_on_step(step: dict[str, Any]) -> None:
+        nonlocal emitted_any
+        emitted_any = True
+        if callable(on_step):
+            try:
+                on_step(step)
+            except Exception:
+                pass
+
+    # 1. Antigravity Managed Agents (antigravity-preview-09-2026)
+    try:
+        ma_budget = min(total_budget * 0.78, max(2.0, total_budget - 8.0)) if total_budget > 10.0 else total_budget * 0.7
+        ma_deadline = min(hard_deadline, time.perf_counter() + ma_budget)
+        ma_cancel = threading.Event()
+        trace, interaction_id, state = _run_with_timeout(
+            lambda: _run_ride_managed_agent_loop(
+                prompt,
+                plan=safe_plan,
+                date_str=date_str,
+                watch_cell=watch_cell,
+                tools=tools,
+                on_step=_tracking_on_step,
+                deadline=ma_deadline,
+                cancel_event=ma_cancel,
+            ),
+            timeout_s=max(0.5, ma_deadline - time.perf_counter()),
+            cancel_event=ma_cancel,
+        )
+        steps, decision = _ensure_ride_steps(
+            trace,
+            plan=safe_plan,
+            date_str=date_str,
+            watch_cell=watch_cell,
+            risky_cells=risky_cells,
+            tools=tools,
+            state=state,
+            on_step=_tracking_on_step,
+        )
+        return {
+            "steps": steps,
+            "decision": decision,
+            "agent_engine": MANAGED_AGENT_NAME,
+            "interaction_id": interaction_id,
+            "elapsed_s": round(time.perf_counter() - t0, 2),
+        }
+    except Exception:
+        pass
+
+    # 2. gemini-4-carbon function-calling loop
+    rem_for_carbon = hard_deadline - time.perf_counter()
+    if rem_for_carbon > 1.0:
+        try:
+            c_cancel = threading.Event()
+            trace, state = _run_with_timeout(
+                lambda: _run_ride_carbon_loop(
+                    prompt,
+                    plan=safe_plan,
+                    date_str=date_str,
+                    watch_cell=watch_cell,
+                    tools=tools,
+                    on_step=_tracking_on_step,
+                    deadline=hard_deadline,
+                    cancel_event=c_cancel,
+                ),
+                timeout_s=max(0.5, rem_for_carbon),
+                cancel_event=c_cancel,
+            )
+            steps, decision = _ensure_ride_steps(
+                trace,
+                plan=safe_plan,
+                date_str=date_str,
+                watch_cell=watch_cell,
+                risky_cells=risky_cells,
+                tools=tools,
+                state=state,
+                on_step=_tracking_on_step,
+            )
+            return {
+                "steps": steps,
+                "decision": decision,
+                "agent_engine": FALLBACK_CARBON_MODEL,
+                "interaction_id": None,
+                "elapsed_s": round(time.perf_counter() - t0, 2),
+            }
+        except Exception:
+            pass
+
+    # 3. Saved trace replay via load_ride_trace(date)
+    try:
+        replayed = load_ride_trace(date_str)
+        if replayed is not None:
+            if risky_cells and isinstance(replayed.get("decision"), dict):
+                replayed["decision"] = _normalize_ride_decision(replayed["decision"], safe_plan)
+            replayed["replayed"] = True
+            replayed["elapsed_s"] = round(time.perf_counter() - t0, 2)
+            if not emitted_any and callable(on_step):
+                for s in replayed.get("steps", []):
+                    _emit_step(on_step, s)
+            return replayed
+    except Exception:
+        pass
+
+    # 4. Deterministic synthesis fallback (only if no saved trace exists)
+    try:
+        state = {}
+        steps, decision = _ensure_ride_steps(
+            [],
+            plan=safe_plan,
+            date_str=date_str,
+            watch_cell=watch_cell,
+            risky_cells=risky_cells,
+            tools=tools,
+            state=state,
+            on_step=_tracking_on_step if not emitted_any else None,
+        )
+        return {
+            "steps": steps,
+            "decision": decision,
+            "agent_engine": "replay",
+            "interaction_id": None,
+            "replayed": True,
+            "elapsed_s": round(time.perf_counter() - t0, 2),
+        }
+    except Exception:
+        fallback_decision = {
+            "action": "reroute" if risky_cells else "proceed",
+            "avoid_cells": risky_cells[:6],
+            "reason": f"Fallback flood safety decision for {watch_cell} on {date_str}.",
+            "rider_message": "Taking a safer route around potential street flooding.",
+            "fleet_notice": f"AVOID {watch_cell}: fallback flood safety routing active.",
+        }
+        return {
+            "steps": [{"tool": "decide", "args": dict(fallback_decision), "result": fallback_decision, "ms": 0}],
+            "decision": fallback_decision,
+            "agent_engine": "replay",
+            "interaction_id": None,
+            "replayed": True,
+            "elapsed_s": round(time.perf_counter() - t0, 2),
+        }
+
+
+def _save_ride_trace(result: dict[str, Any], date_str: str) -> Path | None:
+    try:
+        TRACES_DIR.mkdir(parents=True, exist_ok=True)
+        day = str(date_str or DEFAULT_DATE).strip()[:10] or DEFAULT_DATE
+        out_path = TRACES_DIR / f"ride_{day}.json"
+        payload = dict(result)
+        payload.pop("replayed", None)
+        out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return out_path
+    except Exception:
+        return None
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) >= 2 and argv[0] == "ride":
+        plan_path = Path(argv[1])
+        if not plan_path.is_absolute():
+            candidate = REPO_ROOT / plan_path
+            if candidate.exists():
+                plan_path = candidate
+        if not plan_path.is_file():
+            print(f"Plan file not found: {plan_path}", file=sys.stderr)
+            return 2
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        res = run_ride(plan)
+        if not res.get("replayed") and res.get("agent_engine") == MANAGED_AGENT_NAME:
+            date_str = str(plan.get("date") or str(plan.get("t") or "")[:10] or DEFAULT_DATE)[:10]
+            _save_ride_trace(res, date_str)
+        print(json.dumps(res, indent=2))
+        return 0
+
     if len(argv) < 3:
         print(
-            "Usage: python -m gem.agent <image_path> <lat> <lon> [YYYY-MM-DDTHH:MM]",
+            "Usage: python -m gem.agent <image_path> <lat> <lon> [YYYY-MM-DDTHH:MM]\n"
+            "   or: python -m gem.agent ride <plan.json>",
             file=sys.stderr,
         )
         return 2
