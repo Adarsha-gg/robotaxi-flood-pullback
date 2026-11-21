@@ -381,7 +381,9 @@ def decide_pre_trip(fast, alt, risky, six_mm, fc, live_a=(), live_n=0):
 def closures(date, t_from, t_to):
     """SFMTA-permitted street closures active in [t_from, t_to] (cached per date in data/raw)."""
     path = os.path.join(DATA, "raw", f"closures_{date}.json")
-    if os.path.exists(path):
+    # past days never change; today's list is re-fetched when the cached copy is over 15 minutes old
+    fresh = os.path.exists(path) and (date < time.strftime("%Y-%m-%d") or time.time() - os.path.getmtime(path) < 900)
+    if fresh:
         with open(path) as f:
             rows = json.load(f)
     else:
