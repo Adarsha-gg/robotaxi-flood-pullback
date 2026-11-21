@@ -1,0 +1,267 @@
+{
+  "ts": "2026-11-21T20:20:36Z",
+  "n_cities": 7,
+  "n_live": 7,
+  "n_open_meteo_live": 7,
+  "n_nws_live": 7,
+  "n_pullback": 1,
+  "n_watch": 1,
+  "n_clear": 5,
+  "n_nws_flood_alerts": 1,
+  "wall_ms": 208,
+  "summary": "7/7 US AV markets live in 0.21s \u00b7 1 pullback_active, 1 watch, 5 clear \u00b7 1 active NWS flood alert(s)",
+  "cities": [
+    {
+      "id": "sf",
+      "name": "San Francisco",
+      "lat": 37.7749,
+      "lon": -122.4194,
+      "timezone": "America/Los_Angeles",
+      "av_operators": [
+        "Waymo",
+        "Zoox"
+      ],
+      "flood_hazard": "Atmospheric rivers (4-6/winter) + king tides",
+      "open_311_source": "DataSF 311 Cases (vw6y-z8j6)",
+      "grid_origin": {
+        "lat0": 37.7,
+        "lon0": -122.52,
+        "dlat": 0.0015,
+        "dlon": 0.0019
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.7,
+      "next_24h_mm": 3.3,
+      "peak_mm_h": 1.1,
+      "peak_t": "2026-11-21T19:00",
+      "nws_flood_alert": true,
+      "nws_alerts": [
+        {
+          "event": "Coastal Flood Warning",
+          "severity": "Severe",
+          "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA",
+          "expires": "2026-11-21T18:30:00-08:00",
+          "is_flood": true
+        },
+        {
+          "event": "Coastal Flood Advisory",
+          "severity": "Minor",
+          "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA",
+          "expires": "2026-11-21T18:30:00-08:00",
+          "is_flood": true
+        }
+      ],
+      "risk_level": "pullback_active",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 189
+    },
+    {
+      "id": "austin",
+      "name": "Austin",
+      "lat": 30.2672,
+      "lon": -97.7431,
+      "timezone": "America/Chicago",
+      "av_operators": [
+        "Waymo",
+        "Tesla",
+        "Zoox"
+      ],
+      "flood_hazard": "Flash Flood Alley (30-70+ low-water closures/storm)",
+      "open_311_source": "Austin 311 (i26j-ai4z) + ATXfloods (>100 gauges)",
+      "grid_origin": {
+        "lat0": 30.15,
+        "lon0": -97.88,
+        "dlat": 0.0015,
+        "dlon": 0.0017
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.0,
+      "next_24h_mm": 0.0,
+      "peak_mm_h": 0.0,
+      "peak_t": null,
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "clear",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 190
+    },
+    {
+      "id": "miami",
+      "name": "Miami",
+      "lat": 25.7617,
+      "lon": -80.1918,
+      "timezone": "America/New_York",
+      "av_operators": [
+        "Waymo",
+        "Tesla",
+        "Zoox"
+      ],
+      "flood_hazard": "Tropical storms + NOAA King Tides (sunny-day flooding)",
+      "open_311_source": "Miami-Dade 311 (DERM drainage/flooding) + NOAA King Tides",
+      "grid_origin": {
+        "lat0": 25.68,
+        "lon0": -80.32,
+        "dlat": 0.0015,
+        "dlon": 0.0017
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.0,
+      "next_24h_mm": 0.7,
+      "peak_mm_h": 0.7,
+      "peak_t": "2026-11-22T01:00",
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "clear",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 201
+    },
+    {
+      "id": "atlanta",
+      "name": "Atlanta",
+      "lat": 33.749,
+      "lon": -84.388,
+      "timezone": "America/New_York",
+      "av_operators": [
+        "Waymo",
+        "Zoox"
+      ],
+      "flood_hazard": "Rapid convective cloudbursts (May 20 2026 pre-NWS flood site)",
+      "open_311_source": "ATL311 + Watershed Management catch-basin GIS",
+      "grid_origin": {
+        "lat0": 33.65,
+        "lon0": -84.5,
+        "dlat": 0.0015,
+        "dlon": 0.0018
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 2.0,
+      "next_24h_mm": 5.4,
+      "peak_mm_h": 2.2,
+      "peak_t": "2026-11-22T08:00",
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "watch",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 190
+    },
+    {
+      "id": "san_antonio",
+      "name": "San Antonio",
+      "lat": 29.4241,
+      "lon": -98.4936,
+      "timezone": "America/Chicago",
+      "av_operators": [
+        "Waymo"
+      ],
+      "flood_hazard": "Flash Flood Alley low-water crossings (May 1 2026 NHTSA 26E-026 recall site)",
+      "open_311_source": "San Antonio 311 + SARA ponding GIS",
+      "grid_origin": {
+        "lat0": 29.32,
+        "lon0": -98.65,
+        "dlat": 0.0015,
+        "dlon": 0.0017
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.4,
+      "next_24h_mm": 0.8,
+      "peak_mm_h": 0.4,
+      "peak_t": "2026-11-21T18:00",
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "clear",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 200
+    },
+    {
+      "id": "phoenix",
+      "name": "Phoenix",
+      "lat": 33.4484,
+      "lon": -112.074,
+      "timezone": "America/Phoenix",
+      "av_operators": [
+        "Waymo"
+      ],
+      "flood_hazard": "Monsoon flash floods across desert washes",
+      "open_311_source": "myPHX311 + Maricopa FCDMC flood gauges/GIS",
+      "grid_origin": {
+        "lat0": 33.32,
+        "lon0": -112.22,
+        "dlat": 0.0015,
+        "dlon": 0.0018
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.0,
+      "next_24h_mm": 0.0,
+      "peak_mm_h": 0.0,
+      "peak_t": null,
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "clear",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 207
+    },
+    {
+      "id": "nyc",
+      "name": "New York City",
+      "lat": 40.7128,
+      "lon": -74.006,
+      "timezone": "America/New_York",
+      "av_operators": [
+        "Waymo (testing)"
+      ],
+      "flood_hazard": "Extreme cloudbursts, combined-sewer backups",
+      "open_311_source": "NYC 311 + NYC FloodNet (400+ ultrasonic sensors)",
+      "grid_origin": {
+        "lat0": 40.58,
+        "lon0": -74.06,
+        "dlat": 0.0015,
+        "dlon": 0.002
+      },
+      "ts": "2026-11-21T20:20:36Z",
+      "next_6h_mm": 0.0,
+      "next_24h_mm": 1.2,
+      "peak_mm_h": 0.4,
+      "peak_t": "2026-11-22T10:00",
+      "nws_flood_alert": false,
+      "nws_alerts": [],
+      "risk_level": "clear",
+      "sources": {
+        "open_meteo": "live",
+        "nws": "live"
+      },
+      "errors": [],
+      "ok": true,
+      "wall_ms": 191
+    }
+  ]
+}
