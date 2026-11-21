@@ -25,6 +25,7 @@
       <span id="lgWater"><i class="l-water"></i>street that floods in storms</span>
       <span id="lgCone"><i class="l-cone"></i>lane closure</span>
       <span id="lgFlood"><i class="l-flood"></i>flood reported to 311</span>
+      <span id="lgGhost"><i class="l-ghost"></i>robotaxi on the fastest route</span>
     </div>
   </div>
   <aside>
@@ -57,6 +58,32 @@ PREFETCH.then(P => { if (!P || P.error || running) return;
   L.marker(P.fast.coords.at(-1), {icon: L.divIcon({className: '', html: '<div class="abpin" style="position:absolute;right:12px;top:-12px">B · Caltrain</div>', iconSize: [0, 0]})}).addTo(lay.car);
   map.fitBounds(L.polyline(P.fast.coords).getBounds(), PAD); });
 
+// the "dumb" car: same pickup, same minute, but it only follows the fastest route, and stops at the first street
+// already reported flooded to 311 (real report, filed before it gets there)
+let GHOST = null;
+function ghostStart(P) {
+  const F = P.fast, tm = F.times.map(toMin);
+  const hits = (P.live_a || []).map(x => ({x, i: F.coords.reduce((bi, c, k) => (Math.hypot(c[0] - x.lat, c[1] - x.lon) < Math.hypot(F.coords[bi][0] - x.lat, F.coords[bi][1] - x.lon) ? k : bi), 0)}))
+    .filter(h => toMin(h.x.last) <= tm[h.i]).sort((a, b) => a.i - b.i);
+  const stop = hits[0];
+  const m = L.marker(F.coords[0], {icon: L.divIcon({className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+    html: '<div style="width:22px;height:22px;border-radius:50%;background:#2a2f38;border:3px solid #ff4d5e;box-shadow:0 0 14px rgba(255,77,94,.6)"></div>'}), zIndexOffset: 900})
+    .bindTooltip('Robotaxi on the fastest route', {direction: 'top'}).addTo(lay.car);
+  legend('lgGhost');
+  GHOST = {F, tm, m, stop, stuck: false};
+}
+function ghostTick(v) {
+  const g = GHOST; if (!g || g.stuck) return;
+  let i = g.tm.findLastIndex(t => t <= v); if (i < 0) i = 0;
+  if (g.stop && i >= g.stop.i) {
+    g.stuck = true; g.m.setLatLng(g.F.coords[g.stop.i]);
+    const where = title(g.stop.x.name).replace(/^Intersection /, '').replace(', ', ' & ');
+    L.marker(g.F.coords[g.stop.i], {icon: L.divIcon({className: '', html: `<div class="pin stuck">STUCK · ${esc(where)}</div>`, iconAnchor: [-16, 34]}), zIndexOffset: 950}).addTo(lay.car);
+    say(`A robotaxi on the fastest route is stuck at ${where}: flooded since ${hm(g.stop.x.last)} (real 311 report)`);
+    return;
+  }
+  g.m.setLatLng(g.F.coords[Math.min(i, g.F.coords.length - 1)]);
+}
 function pulseAt(x) {
   L.marker([x.lat, x.lon], {icon: L.divIcon({className: '', iconSize: [36, 36], iconAnchor: [18, 18], html: '<div class="ring" style="width:36px;height:36px;border-color:var(--flood)"></div>'})}).addTo(lay.haz);
 }
@@ -75,7 +102,7 @@ async function drive(R, fromIdx, toIdx, onTick, until, myId) {
 
 async function start() {
   const myId = ++runId; const alive = () => running && runId === myId;
-  running = true; SPEED = 1; $('feed').innerHTML = ''; Object.values(lay).forEach(l => l.clearLayers());
+  running = true; SPEED = 1; GHOST = null; $('feed').innerHTML = ''; Object.values(lay).forEach(l => l.clearLayers());
   // 1. before pickup
   initSteps([['Live reports', 'What 311 already knows'], ['Route', 'Pick a route before pickup'], ['Forecast', 'Re-check while driving'], ['Simulate', 'Genie 4 · the street ahead'], ['Decide', 'Gemini 4 Carbon · no human'], ['Fleet agent', 'Antigravity Managed Agent']]);
   step(0, 'active'); progress(0);
@@ -123,9 +150,10 @@ async function start() {
 
   // 2. drive; mid-ride check prepared in the background
   state('driving'); say('Driving · re-checking the forecast every minute');
+  ghostStart(P);
   const C = await post('/api/ride/check');
   if (C.error) { card('Check failed', esc(C.error)); running = false; return; }
-  await drive(A, 0, C.at_index, null, null, myId);
+  await drive(A, 0, C.at_index, ghostTick, null, myId);
   if (!alive()) return;
   const W = C.watch;
   (C.live_new || []).forEach(floodDot);
@@ -139,7 +167,7 @@ async function start() {
   step(2, 'done', `${C.peak.mm} mm/h in the next hour`);
   SPEED = 0.35; state('slowing · simulating', true);
   const capIdx = W ? Math.max(C.at_index + 1, (W.route_index || A.coords.length) - 3) : A.coords.length - 1;   // stop short of the street being simulated
-  const midDrive = drive(A, C.at_index, capIdx, null, () => done, myId);
+  const midDrive = drive(A, C.at_index, capIdx, ghostTick, () => done, myId);
   await sleep(2200);
 
   // 3. what's ahead, then 4. the Genie stage
@@ -192,17 +220,17 @@ async function start() {
   const x5 = card('Decision · no human', esc(D2.headline), `${actPill(D2.action)}<span class="pill p-info">ETA ${hm(B.times.at(-1))} (${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min)</span>`);
   x5.innerHTML = why(D2); riderVoice(D2.rider_message);
   step(4, 'done', esc(D2.headline)); T_END = toMin(B.times.at(-1));
-  etaLine(`<b>ETA ${hm(B.times.at(-1))}</b>${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min after reroute`);
+  etaLine(`<b>ETA ${hm(B.times.at(-1))}</b>${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min ${D2.action === 'reroute' ? 'after reroute' : 'route kept'}`);
   say(D2.action === 'reroute' ? `Rerouted around ${title(W ? W.name : 'the hazard')}. The car never stopped.` : `Checked ${title(W ? W.name : 'the street')}: passable. Keeping the route.`);
   SPEED = 1.6; state('driving');
-  await drive(B, 0, B.coords.length - 1, null, null, myId);
+  await drive(B, 0, B.coords.length - 1, ghostTick, null, myId);
   if (!alive()) return;
   collapse(`<b>Carbon ${D2.action === 'reroute' ? 'rerouted' : 'kept the route'}</b> · arrived ${hm(B.times.at(-1))}`);
   state('arrived'); say(`Arrived ${hm(B.times.at(-1))} · never stopped, never stranded`);
   await sleep(1500);
 
   // 6. what really happened
-  document.querySelectorAll('.pin:not(.fast)').forEach(e => e.remove());
+  document.querySelectorAll('.pin:not(.fast):not(.stuck)').forEach(e => e.remove());
   T_END = 1e9; progress(1); T_START = -1e9;
   const x6 = card('Did it work?', 'Real 311 reports in the next 2 hours');
   x6.innerHTML = `<div class="big"><div><b id="cOld" style="color:var(--flood)">0</b><span>on the fastest route</span></div><div><b id="cNew" style="color:var(--route)">0</b><span>on the route W-112 took</span></div></div>${PR.backtest ? `<p style="color:var(--text)">${esc(PR.backtest)}</p>` : ''}<p id="pSub"></p>`;
@@ -218,7 +246,8 @@ async function start() {
   }
   const arrT = B.times.at(-1), during = PR.new_route.filter(e => e.t <= arrT).length;
   const fewer = PR.old_n ? Math.round((1 - PR.new_n / PR.old_n) * 100) : 0;
-  $('pSub').innerHTML = `<b style="color:var(--text)">${fewer}% fewer</b> on the route W-112 took · <b style="color:var(--text)">${during}</b> reported there while W-112 was on the road (until ${hm(arrT)})`;
+  const gs = GHOST && GHOST.stuck ? `<br>The robotaxi on the fastest route: <b style="color:var(--flood)">stuck at ${esc(title(GHOST.stop.x.name).replace(/^Intersection /, '').replace(', ', ' & '))}</b> (flooded since ${hm(GHOST.stop.x.last)}).` : '';
+  $('pSub').innerHTML = `<b style="color:var(--text)">${fewer}% fewer</b> on the route W-112 took · <b style="color:var(--text)">${during}</b> reported there while W-112 was on the road (until ${hm(arrT)})${gs}`;
   say(`Next 2 hours: ${PR.old_n} floods on the fastest route. ${PR.new_n} on ours.`);
   state('done'); running = false;
   $('feed').insertAdjacentHTML('beforeend', '<button class="btn wide" id="again">▶ Replay</button>');

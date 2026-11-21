@@ -30,7 +30,7 @@ document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TE
 const hm = t => String(t || '').slice(11, 16);
 const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
 const fmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
-const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/, \d{5}$/, '').replace(/^Intersection (Of )?/i, '').replace(/, Virtual$/i, '');
+const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/,? \d{5}$/, '').replace(/^Intersection (Of )?/i, '').replace(/, Virtual$/i, '');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const pct = v => Math.round((v || 0) * 100) + '%';
 const PAD = {paddingTopLeft: [40, 100], paddingBottomRight: [40, 120]};
@@ -45,25 +45,37 @@ const legend = id => { const e = $(id); if (e) e.classList.add('show'); };
 
 // ---------- panel: finished steps collapse to one line; one open card ----------
 let current = null;
-function collapse(line) { if (current) { current.remove(); current = null; } if (line && !$('steps')?.children.length) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
+// every finished card is kept per step, with the map view at that moment, so a step can be clicked to review it
+let ACTIVE_STEP = -1; const SNAP = {};
+function snap() {
+  if (!current || ACTIVE_STEP < 0) return;
+  const c = current.cloneNode(true); c.removeAttribute('id'); c.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+  const list = SNAP[ACTIVE_STEP] = SNAP[ACTIVE_STEP] || [], entry = {el: current, html: c.outerHTML, center: map.getCenter(), zoom: map.getZoom(), caption: $('caption').textContent};
+  for (const k in SNAP) { const j = SNAP[k].findIndex(x => x.el === current); if (j >= 0) { SNAP[k][j] = {...entry}; return; } }   // same card again: keep the fuller copy
+  list.push(entry);
+}
+function collapse(line) { snap(); if (current) { current.remove(); current = null; } if (line && !$('steps')?.children.length) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
 // step tracker (designed in Figma: Replay v2) + trip card progress
 function initSteps(list) {
+  ACTIVE_STEP = -1; Object.keys(SNAP).forEach(k => delete SNAP[k]); closeReview();
   $('steps').innerHTML = list.map(([h, d], i) => `<div class="st todo" id="st${i}"><div class="bd">${i + 1}</div><div><b>${esc(h)}</b><span>${esc(d)}</span></div></div>`).join('');
 }
 function step(i, st, detail) {
   const e = $('st' + i); if (!e) return;
   for (let k = 0; k < i && st === 'active'; k++) { const p = $('st' + k); if (p && !p.classList.contains('done')) { p.className = 'st done'; p.querySelector('.bd').textContent = '✓'; } }
+  if (st === 'active') { snap(); ACTIVE_STEP = i; }
   e.className = 'st ' + st; e.querySelector('.bd').textContent = st === 'done' ? '✓' : i + 1;
   if (detail != null) e.querySelector('span').innerHTML = detail;
 }
 const progress = f => { const p = $('prog'); if (p) p.style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%'; };
 const etaLine = t => { const e = $('eta'); if (e) e.innerHTML = t; };
 function card(k, h, p) {
-  if (current) current.remove();
+  snap(); if (current) current.remove();
   $('feed').insertAdjacentHTML('beforeend', `<div class="card" id="cur"><div class="k">${k}</div><h3>${h}</h3>${p ? `<p>${p}</p>` : ''}<div id="curx"></div></div>`);
   current = $('cur'); return $('curx');
 }
-new MutationObserver(() => { $('feed').scrollTop = $('feed').scrollHeight; }).observe($('feed'), {childList: true, subtree: true});
+// keep the top of the open card in view (tall cards like the final score must not scroll their headline away)
+new MutationObserver(() => { const f = $('feed'); f.scrollTop = current ? Math.max(0, current.offsetTop - f.offsetTop - 8) : f.scrollHeight; }).observe($('feed'), {childList: true, subtree: true});
 const say = t => { const c = $('caption'); c.textContent = t; c.style.display = t ? 'block' : 'none'; };
 const state = (t, slow) => { $('state').textContent = t; $('state').className = 'pillst ' + (slow ? 'slow' : /arrived|done/.test(t) ? 'done' : ''); };
 
@@ -171,3 +183,35 @@ async function fleetAgent(stepIdx, inc, alive) {
     }
   }
 }
+
+// ---------- review a past step: click it in the tracker; the run pauses until "Back to live" ----------
+let REVIEW = null;
+function openReview(i) {
+  const cards = SNAP[i] || [];
+  if (!cards.length) return;
+  if (!REVIEW) REVIEW = {center: map.getCenter(), zoom: map.getZoom(), caption: $('caption').textContent, wasPaused: PAUSED};
+  if (!PAUSED) togglePause();
+  document.querySelectorAll('.st').forEach(e => e.classList.toggle('viewing', e.id === 'st' + i));
+  let r = $('review');
+  if (!r) { r = document.createElement('div'); r.id = 'review'; $('feed').before(r); }
+  const name = $('st' + i)?.querySelector('b')?.textContent || 'Step';
+  r.innerHTML = `<div class="rvbar"><span>Reviewing · ${esc(name)}</span><button onclick="closeReview()">Back to live ▶</button></div>` + cards.map(c => c.html).join('');
+  $('feed').style.display = 'none';
+  const last = cards[cards.length - 1];
+  map.flyTo(last.center, last.zoom, {duration: .8}); if (last.caption) say(last.caption);
+}
+function closeReview() {
+  const r = $('review'); if (r) r.remove();
+  if ($('feed')) $('feed').style.display = '';
+  document.querySelectorAll('.st.viewing').forEach(e => e.classList.remove('viewing'));
+  if (!REVIEW) return;
+  map.flyTo(REVIEW.center, REVIEW.zoom, {duration: .6}); say(REVIEW.caption);
+  if (!REVIEW.wasPaused && PAUSED) togglePause();
+  REVIEW = null;
+}
+document.addEventListener('click', e => {
+  const st = e.target.closest && e.target.closest('.st');
+  if (!st) return;
+  const i = +st.id.slice(2);
+  if (st.classList.contains('viewing')) closeReview(); else openReview(i);
+});
