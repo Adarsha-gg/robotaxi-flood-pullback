@@ -1,0 +1,64 @@
+{
+  "verdict": {
+    "flooded_p": 0.8185,
+    "depth_score": 0.5981,
+    "depth_label": "ankle",
+    "latency_ms": 1388,
+    "rubric": {
+      "reaches_curb": 0.6549,
+      "sedan_stall": 0.5559,
+      "lane_visible": 0.2936
+    },
+    "per_frame": [
+      {
+        "flooded_p": 0.866,
+        "depth_score": 0.6971,
+        "depth_label": "ankle",
+        "latency_ms": 917,
+        "rubric": {
+          "reaches_curb": 0.6822,
+          "sedan_stall": 0.6538,
+          "lane_visible": 0.3094
+        }
+      },
+      {
+        "flooded_p": 0.8185,
+        "depth_score": 0.5981,
+        "depth_label": "ankle",
+        "latency_ms": 1306,
+        "rubric": {
+          "reaches_curb": 0.5991,
+          "sedan_stall": 0.5559,
+          "lane_visible": 0.2267
+        }
+      },
+      {
+        "flooded_p": 0.7792,
+        "depth_score": 0.5613,
+        "depth_label": "ankle",
+        "latency_ms": 1360,
+        "rubric": {
+          "reaches_curb": 0.6549,
+          "sedan_stall": 0.4808,
+          "lane_visible": 0.2936
+        }
+      }
+    ],
+    "trend": "steady",
+    "agreement": 0.9132,
+    "action": "avoid"
+  },
+  "frame": "media/sim_cache/r50_c66/frame_2.jpg",
+  "frames": [
+    "media/sim_cache/r50_c66/frame_0.jpg",
+    "media/sim_cache/r50_c66/frame_1.jpg",
+    "media/sim_cache/r50_c66/frame_2.jpg"
+  ],
+  "genie_first_frame_s": 4.9,
+  "total_s": 14.4,
+  "frames_seen": 150,
+  "source": "genie",
+  "waited_s": 14.44,
+  "error": null,
+  "clip": "media/sim_cache/r50_c66/clip.mp4"
+}

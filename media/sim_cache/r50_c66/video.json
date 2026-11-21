@@ -1,0 +1,9 @@
+{
+  "flooded_p": 0.98,
+  "depth_score": 0.67,
+  "depth_label": "ankle",
+  "latency_ms": 8862,
+  "summary": "Standing water covers the street intersection and laps onto the sidewalk around the curb. Passing cars drive through ankle-deep water, generating large splashes and waves.",
+  "first_water_s": 0.0,
+  "path": "media/sim_cache/r50_c66/clip.mp4"
+}
