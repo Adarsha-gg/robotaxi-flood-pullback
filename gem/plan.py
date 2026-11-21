@@ -193,26 +193,36 @@ def _clean_time(ts: str, date: str, fallback: str) -> str:
     return f"{date}T{hh:02d}:{mm:02d}"
 
 
+MIN_STORM_DAYS = 2
+
+
 def _build_candidate_basins(
     cell_list: list[dict[str, Any]],
     grid: dict[str, float],
     forecast_peak6: float = 0.0,
+    total_mm: float = 0.0,
 ) -> list[dict[str, Any]]:
-    import os, json
-    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-    from pipeline.baseline import six_hour, MIN_STORM_DAYS
-    with open("data/forecast_2026-11-18.json") as f:
-        fc = json.load(f)
-    s6 = six_hour(fc["hours"])
-    peak6 = max(s6)
-    
-    at_risk = [c for c in cell_list if int(c.get("n_storm_days", 0)) >= MIN_STORM_DAYS and c.get("thresh_mm_6h") is not None and peak6 >= float(c["thresh_mm_6h"])]
+    peak6 = float(forecast_peak6 or 0.0)
+    if total_mm > 0 and total_mm < 20.0:
+        # Scale down area budget proportionally on light-rain days (e.g., ~9 mm)
+        cell_cap = min(AREA_CAP_CELLS, max(45, int(AREA_CAP_CELLS * (total_mm / 25.0))))
+    else:
+        cell_cap = AREA_CAP_CELLS
+
+    at_risk = [
+        c
+        for c in cell_list
+        if int(c.get("n_storm_days", 0)) >= MIN_STORM_DAYS
+        and c.get("thresh_mm_6h") is not None
+        and peak6 >= float(c["thresh_mm_6h"])
+    ]
+    if not at_risk and cell_list:
+        at_risk = [c for c in cell_list if int(c.get("n_storm_days", 0)) >= MIN_STORM_DAYS][:60]
     at_risk.sort(key=lambda c: (-int(c.get("n_storm_days", 0)), -int(c.get("n_reports", 0))))
-    top_347 = at_risk[:AREA_CAP_CELLS]
+    top_cells = at_risk[:cell_cap]
     all_by_id = {c["id"]: c for c in cell_list}
-    
-    top_ids = [c["id"] for c in top_347]
-    grid_rc = {c["id"]: _parse_cell_id(c["id"]) for c in top_347}
+
+    top_ids = [c["id"] for c in top_cells]
     
     left = set(top_ids)
     comps = []
@@ -365,16 +375,16 @@ def propose_zones(
 
     all_by_id = {c["id"]: c for c in cell_list}
 
-    # 1. Pre-cluster top historically flood-prone cells into compact candidate basins
-    basins = _build_candidate_basins(cell_list, grid)
-    basin_by_id = {b["cluster_id"]: b for b in basins}
-
-    # 2. Compute 6-hour rolling sums and forecast summary
+    # 1. Compute 6-hour rolling sums and forecast summary
     hourly = _six_hour_sums(forecast.get("hours", []))
     total_mm = float(forecast.get("total_mm", sum(h["mm"] for h in hourly)))
     peak_6h = max((h["sum_6h_mm"] for h in hourly), default=0.0)
     peak_6h_t = max(hourly, key=lambda h: h["sum_6h_mm"])["t"] if hourly else f"{date}T12:00"
     daytime_6h = max((h["sum_6h_mm"] for h in hourly if h["t"][11:13] <= "15"), default=0.0)
+
+    # 2. Pre-cluster top historically flood-prone cells into compact candidate basins
+    basins = _build_candidate_basins(cell_list, grid, forecast_peak6=peak_6h, total_mm=total_mm)
+    basin_by_id = {b["cluster_id"]: b for b in basins}
 
     compact_basins = [
         {
