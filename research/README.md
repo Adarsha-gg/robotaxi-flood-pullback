@@ -2,10 +2,14 @@
 
 Central folder for all verified storm facts, physics/hydrology grounding, business ROI math, real-world AV flood incidents, competitive moat, quantitative flood-memory experiments, wildcard upgrade blueprints, SDK 3.6.1 notes, and judge-ready pitch/submission copy.
 
-## Files in `research/` (10 Verified Docs)
+## Files in `research/` (14 Verified Docs)
 
 | File | Contents |
 |---|---|
+| [WORLD_MODELS_AND_SOTIF.md](WORLD_MODELS_AND_SOTIF.md) | **DeepMind-Proof Genie 4 Framing:** Answers *"isn't Decision 1 grading Genie pixels circular?"* citing **Waymo's Feb 2026 World Model (built on DeepMind's Genie 3 for flooded streets)**, DeepMind's Veo red-teaming paper (`arXiv:2512.10675`), TUM's circularity/admissibility ladder (`arXiv:2607.07196`), Wayve GAIA-2, NVIDIA Cosmos, and ISO 21448 SOTIF Area 3 flywheels. |
+| [DMV_BAN_RECALLS_AND_WZDX.md](DMV_BAN_RECALLS_AND_WZDX.md) | **Exact 2026 NHTSA Recalls, CA DMV Suspension & WZDx:** Verified recall IDs **`26E-026`** (May 6, floods, 3,791 cars) and **`26E-035`** (Jun 17, freeway work zones, 3,871 cars), Nov 5 US-101 Burlingame + Nov 6 I-280 CHP incidents → Nov 11/17 CA DMV freeway suspension, and 1-to-1 SFMTA `8x25-yybr` → **USDOT WZDx** (20+ US states) & Caltrans LCS mapping. |
+| [GLOBAL_AV_REGULATORY_AND_ISO34503.md](GLOBAL_AV_REGULATORY_AND_ISO34503.md) | **2026–2027 Expansion Markets & CA Statutory Compliance:** **CA AB 1777** (effective Jul 1, 2026: **2-min emergency geofencing deadline** — we run in 5–25 s), **CA SB 1246** ($10K/AV blocking fine), **$957K** in SFMTA Waymo tickets, ISO 34503:2023 Dynamic ODD (`COD ⊄ ODD → OMS → MRM/MRC`), and flood exposure across Miami, Houston, Dallas, Las Vegas (Zoox + Waymo), Atlanta, London, Tokyo. |
+| [NOV18_PRESS_AND_MANAGED_AGENT_PLAYBOOK.md](NOV18_PRESS_AND_MANAGED_AGENT_PLAYBOOK.md) | **Verified Nov 18 Press Quotes & $5k Managed Agents Playbook:** Verbatim CBS/Engadget/KQED/KTVU quotes (`@NWSBayArea`, SF Supervisor Bilal Mahmood, Waymo in-app message, Muni Van Ness Station closure) + Cerebral Valley / DeepMind $5k Managed Agents rubric & 20-sec proof choreography. |
 | [JUDGE_CHEAT_SHEET.md](JUDGE_CHEAT_SHEET.md) | **1-Page Judge Cheat Sheet:** 15-sec hook, why each of the 5 Gemini 4 surfaces is irreplaceable, DeepMind trap-avoidance checklist, and top Q&A 1-liners aligned with the fully autonomous `/ride` + Wildcards stack. |
 | [SUBMISSION_DRAFT.md](SUBMISSION_DRAFT.md) | Judge-ready README / Devpost writeup with Mermaid architecture diagram of all 5 Gemini 4 surfaces, leakage-free evaluation table, `$5k` Antigravity Managed Agents section, and quickstart. |
 | [BUSINESS_CASE_AND_EXPANSION.md](BUSINESS_CASE_AND_EXPANSION.md) | **Verified Dollar ROI & Multi-City Case:** Nov 18 23h shutdown = **$607K–$629K lost fares + $50K–$190K vehicle exposure**; surgical 8% Dynamic ODD saves **$566K–$715K/storm** (<1-storm payback, **$6M–$15M+/yr** nationally); 12-city open 311 expansion matrix; Swiss Re cat-insurance & RAND/SOTIF Genie 4 flywheel. |
