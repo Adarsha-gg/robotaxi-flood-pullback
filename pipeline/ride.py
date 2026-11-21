@@ -124,7 +124,11 @@ def check(p, at_index, min_frac=0.0):
         r["photo"] = _car_photo(p["date"], r["lat"], r["lon"])
     near = [r for r in risky_b if r["photo"] and r["photo"]["dist_m"] <= 900]
     watch = dict((near or risky_b)[0]) if risky_b else None
-    return {"t": t_now, "at_index": at_index, "forecast_source": fc_latest["source"], "next_hours": hrs,
+    ahead_coords = ra["coords"][at_index:]
+    cl = closures_near(ahead_coords, closures(p["date"], t_now, p["route_a"]["times"][-1]))
+    if watch:
+        watch["closures"] = [c for c in cl if min(_dist_m((watch["lat"], watch["lon"]), b) for b in c["line"]) < 500]
+    return {"t": t_now, "at_index": at_index, "closures_ahead": cl, "forecast_source": fc_latest["source"], "next_hours": hrs,
             "peak": peak, "six_h_mm": six_b, "risky_b": risky_b, "watch": watch}
 
 
@@ -150,6 +154,8 @@ CAR_QUESTIONS = {
                                "water at or above the wheel hub, stall risk for a car"]},
     "edges_hidden": {"type": "noul", "instructions":
         "Does the water hide the lane markings or the curb line, so a self-driving car could not tell where the road edge is?"},
+    "lane_closed": {"type": "noul", "instructions":
+        "Is any travel lane closed or blocked by cones, barriers, a construction zone, workers, a flagger or police directing traffic?"},
 }
 
 
@@ -172,7 +178,7 @@ def judge_car(jpeg):
     p_tire_or_worse = sum(v for k, v in probs.items() if k >= 3)
     action = "avoid" if (lane >= 0.6 and p_tire_or_worse >= 0.5) or (hidden >= 0.6 and lane >= 0.6) else (
         "slow" if lane >= 0.5 else "proceed")
-    return {"lane_covered": round(lane, 3), "edges_hidden": round(hidden, 3),
+    return {"lane_covered": round(lane, 3), "edges_hidden": round(hidden, 3), "lane_closed": round(a["lane_closed"].noul, 3),
             "depth_level": level, "depth_label": CAR_QUESTIONS["car_depth"]["criteria"][level],
             "p_tire_or_worse": round(p_tire_or_worse, 3), "action": action, "latency_ms": int((time.time() - t0) * 1000)}
 
@@ -189,6 +195,10 @@ def simulate(watch, chk, session_holder, settle_s=1.2, max_wait=25):
               f"streets; this intersection's roadway flooded in {watch['n_storm_days']} past storms. Show the water "
               f"across the driving lane and how high it reaches on the wheels of cars ahead. The robotaxi drives "
               f"forward slowly in its lane. Keep the real street layout from the reference photo.")
+    if watch.get("closures"):
+        c0 = watch["closures"][0]
+        prompt += (f" There is also a permitted lane closure on {c0['street'].title()} between {str(c0['from']).title()} and "
+                   f"{str(c0['to']).title()} ({c0['impact']}): orange cones and barriers close part of the roadway.")
     t0 = time.time()
     s = GenieSession(img, prompt, max_seconds=30).start()
     session_holder["session"], session_holder["photo"] = s, {**photo, "zone": watch["name"]}
@@ -291,3 +301,32 @@ def decide_pre_trip(fast, alt, risky, six_mm, fc):
                               "flagged_blocks_crossed": 0},
         "forecast": {"source": fc.get("source"), "day_total_mm": fc.get("total_mm"), "six_hour_mm_by_8am": six_mm},
         "options": {"reroute": "take the flood-aware route", "keep_route": "take the fastest route"}})
+
+
+# ---------------- second hazard: permitted lane closures (DataSF 8x25-yybr, has a WZDx twin) ----------------
+def closures(date, t_from, t_to):
+    """SFMTA-permitted street closures active in [t_from, t_to] (cached per date in data/raw)."""
+    path = os.path.join(DATA, "raw", f"closures_{date}.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            rows = json.load(f)
+    else:
+        import urllib.parse, urllib.request
+        q = urllib.parse.urlencode({"$where": f"start_dt<='{date}T23:59:59' AND end_dt>='{date}T00:00:00'", "$limit": 2000})
+        with urllib.request.urlopen(f"https://data.sfgov.org/resource/8x25-yybr.json?{q}", timeout=60) as r:
+            rows = json.load(r)
+        with open(path, "w") as f:
+            json.dump(rows, f)
+    out = []
+    for c in rows:
+        if c.get("start_dt", "") <= t_to and c.get("end_dt", "") >= t_from and c.get("shape"):
+            out.append({"street": c["street"], "from": c.get("from_st"), "to": c.get("to_st"), "type": c.get("type"),
+                        "impact": c.get("veh_imp"), "start": c.get("start_dt"), "end": c.get("end_dt"),
+                        "name": c.get("case_name"),
+                        "line": [[y, x] for x, y in c["shape"]["coordinates"]]})
+    return out
+
+
+def closures_near(coords, cl, m=40):
+    pts = coords[::2]
+    return [c for c in cl if any(min(_dist_m(a, b) for a in pts) < m for b in c["line"])]

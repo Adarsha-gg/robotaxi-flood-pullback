@@ -203,6 +203,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "moment": "mid-ride: newer forecast arrived; car is slowing while it decides",
                 "street_ahead": w.get("name"), "reached_at": (w.get("eta") or "")[11:16], "now": b["t"][11:16],
                 "street_flood_history": {"past_storms_with_street_flooding": w.get("n_storm_days"), "latest": (w.get("storm_days") or [])[:3]},
+                "permitted_lane_closures_here": [{k: x[k] for k in ("street", "from", "to", "impact", "type", "start", "end")} for x in (w.get("closures") or [])],
                 "forecast": {"source": c.get("forecast_source"), "next_hour_mm": (c.get("peak") or {}).get("mm"), "six_hour_mm": c.get("six_h_mm")},
                 "genie4_simulation_judged_by_decision1": sim,
                 "current_route_remaining_minutes": rest_a_min,
