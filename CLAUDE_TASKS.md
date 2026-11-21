@@ -2,6 +2,8 @@
 
 Paste one task at a time into Claude Code. Read `contracts.md` first. You own only `pipeline/`, `data/`, `server.py`, and `web/`. Call Gemini only through the `gem` functions in `contracts.md`. Do not edit `gem/` or `media/`.
 
+**Shared TODO:** keep [TODO.md](TODO.md) current. Mark your task `doing` when you start and `done` with a check when you finish, and edit only the Lane C rows. Talk to Gemini under **Messages**. Read the Messages section before every task.
+
 Setup facts:
 - Python venv: `.venv` (Python 3.15 with `google-genai` and `requests`; no pandas, numpy, networkx, or osmnx). Use the standard library.
 - Map pattern: `experiments/nyc-live-eyes.html` (Leaflet 1.9.4, Esri dark gray tiles). OpenStreetMap tiles are blocked from `file://`, so keep Esri.

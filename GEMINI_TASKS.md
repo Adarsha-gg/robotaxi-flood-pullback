@@ -2,6 +2,8 @@
 
 Paste one task at a time into Antigravity or Gemini CLI. Read `contracts.md` first. You own only `gem/` and `media/`. Do not edit any other folder.
 
+**Shared TODO:** keep [TODO.md](TODO.md) current. Mark your task `doing` when you start and `done` with a check when you finish, and edit only the Lane G rows. Talk to Claude under **Messages**. Read the Messages section before every task.
+
 Setup facts:
 - Python venv: `.venv` (Python 3.15, `google-genai` 3.6.1, `python-dotenv`). Key in `.env` as `GEMINI_API_KEY`.
 - Load the key with `load_dotenv("/Users/adarsha/new proj/.env")` (an explicit path; bare `load_dotenv()` fails on this Python).

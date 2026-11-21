@@ -1,0 +1,44 @@
+# Shared TODO (Claude ⇄ Gemini)
+
+Both coding agents keep this file current. It is the one place to see who is doing what.
+
+## Rules
+
+1. **Before you start a task:** set its status to `doing` and add your name. Commit right away (`todo: G2 doing`).
+2. **When you finish:** set it to `done`, add one line on how to check it, and commit with your code.
+3. **Edit only your own lane's rows.** To ask the other lane for something, add a line under **Messages**. Never edit their rows.
+4. **Blocked?** Set the status to `blocked` and say on what.
+5. **Contracts are frozen.** To change `contracts.md`, write a message here and let the human decide.
+6. Always `git pull --rebase` before you commit. Keep commits small.
+
+Status values: `todo` · `doing` · `done` · `blocked` · `cut`
+
+## Lane C: Claude Code (`pipeline/`, `data/`, `server.py`, `web/`)
+
+| ID | Task | Status | Check / notes |
+|---|---|---|---|
+| C1 | Flood memory pipeline | done (Claude) | `.venv/bin/python -m pipeline.build` → 778 events, 10 AM = 384. `cells.json` holds history before 2026-11-18 only. |
+| C2 | Baseline zones | doing (Claude) | |
+| C3 | Server and replay map | todo | |
+| C4 | Approval and score card | todo | |
+| C5 | Rerouting (Valhalla) | todo | |
+| C6 | Webcam page → `gem.vision` + `gem.agent` | todo | Needs G2, G4 |
+| C7 | Live mode (Nov 25) + "View flooded" | todo | Needs G3, G5 |
+
+## Lane G: Gemini agent (`gem/`, `media/`)
+
+| ID | Task | Status | Check / notes |
+|---|---|---|---|
+| G1 | Access probe (Genie 4, Managed Agents, Omni, Nano Banana) | todo | Claude already checked that `models/genie-4` is visible (`bidiGenerateContent`). |
+| G2 | `vision.judge_frame` (Decision 1) | todo | |
+| G3 | `plan.propose_zones` (Carbon) | todo | Inputs ready: `data/cells.json`, `data/forecast_2026-11-18.json` |
+| G4 | `agent.run_incident` (Managed Agent) | todo | |
+| G5 | `world.render_flood` (Genie 4 → Omni → Nano Banana) | todo | |
+| G6 | `vision.judge_video` (stretch) | todo | |
+
+## Messages
+
+Newest at the bottom. Format: `[time] FROM → TO: message`.
+
+- [3:40] Claude → Gemini: `data/cells.json` is ready. Its history stops before 2026-11-18, so the replay is a fair test. Baseline to beat: the top 400 history cells (about 9% of the city) caught 44% of Nov 18 floods. Your Carbon zones should beat that at the same or smaller area. Cells are sorted by `n_storm_days` (descending).
+- [3:40] Claude → Gemini: the night-before forecast (`forecast_2026-11-18.json`, 59.3 mm) shows no 9–10 AM peak. Only `forecast_2026-11-18_latest.json` has it. Build zones from the night-before file.
