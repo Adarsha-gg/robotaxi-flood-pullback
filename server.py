@@ -243,8 +243,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({k: v for k, v in p.items() if not k.startswith("_")})
         if u.path == "/api/trip/eyes":
             from concurrent.futures import ThreadPoolExecutor
-            from pipeline import live_ride as LR
-            cams = TRIP["plan"]["cams"][:6]
+            from pipeline import live_ride as LR, trip
+            cams = TRIP["plan"]["cams"][:8]
             def safe(c):
                 try:
                     return LR.camera_now(c)
@@ -252,7 +252,9 @@ class Handler(SimpleHTTPRequestHandler):
                     return {"cam": c["id"], "name": c["name"], "available": False, "frame": "", "error": str(e)[:120]}
             with ThreadPoolExecutor(6) as ex:
                 TRIP["cams"] = list(ex.map(safe, cams))
-            return self.send_json(TRIP["cams"])
+            tgt, cam = trip.pick_sim(TRIP["plan"], TRIP["cams"])
+            return self.send_json({"cams": TRIP["cams"], "sim_target": tgt and tgt["cell"], "sim_cam": cam and cam["cam"],
+                                   "sim_cam_dist": cam and cam["dist_m"]})
         if u.path == "/api/trip/simulate":
             from pipeline import trip
             if GENIE["session"]:

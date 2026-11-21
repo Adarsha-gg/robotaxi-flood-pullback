@@ -21,6 +21,8 @@ from pipeline.build import get_json, SF, TZ
 ROOT = ride.ROOT
 DATA = ride.DATA
 CAM_RADIUS_M = 600
+from zoneinfo import ZoneInfo
+SF_TZ = ZoneInfo("America/Los_Angeles")  # the trip happens in SF, whatever the laptop clock says
 
 
 def live_forecast():
@@ -41,7 +43,7 @@ def _six(hours, t):
 
 
 def plan_live(frm, to, t=None):
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    now = datetime.now(SF_TZ).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M")
     hours = live_forecast()
     t = t or next_rainy_hour(hours, now)
     cells = {c["id"]: c for c in ride._j("cells_street_live.json")["cells"]}
@@ -130,7 +132,7 @@ def camera_now(cam):
         v = {**v, **fw, "freeway_clear": fw["lane_closed"] < 0.5 and fw["stopped_vehicle"] < 0.5 and v["action"] == "proceed"}
     return {"cam": cam["id"], "name": cam["name"], "frame": os.path.relpath(path, ROOT), "available": real >= 0.5,
             "real_view_p": round(real, 3), "lat": cam["lat"], "lon": cam["lon"], "eta": cam.get("eta"), "dist_m": cam.get("dist_m"),
-            "fetched_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"), "verdict": v}
+            "fetched_at": datetime.now(SF_TZ).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S"), "verdict": v}
 
 
 def simulate_cam(cam, frame_path, eta, mm_eta, six_mm, session_holder, settle_s=1.2, max_wait=25):

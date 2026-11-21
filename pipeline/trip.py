@@ -23,6 +23,8 @@ from pipeline import ride, live_ride as LR, route as R
 
 ROOT, DATA = ride.ROOT, ride.DATA
 SF_BOX = "-122.52,37.83,-122.35,37.70"
+from zoneinfo import ZoneInfo
+SF_TZ = ZoneInfo("America/Los_Angeles")  # the trip happens in SF, whatever the laptop clock says
 
 
 def geocode(q):
@@ -40,7 +42,7 @@ def geocode(q):
 
 def notices(hours=72):
     """Real 311 street-flooding reports in the last `hours` (the city refreshes this feed daily)."""
-    since = (datetime.now() - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
+    since = (datetime.now(SF_TZ).replace(tzinfo=None) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
     q = urllib.parse.urlencode({"$select": "requested_datetime,address,lat,long,service_details,media_url",
                                 "$where": f"lower(service_subtype)='flooding' AND requested_datetime > '{since}'",
                                 "$limit": 2000})
@@ -68,7 +70,7 @@ def _near_route(points, coords, m):
 
 def plan(from_q, to_q, depart=None):
     a, b = geocode(from_q), geocode(to_q)
-    depart = depart or datetime.now().strftime("%Y-%m-%dT%H:%M")
+    depart = depart or datetime.now(SF_TZ).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M")
     hours = LR.live_forecast()
     cells = {c["id"]: c for c in ride._j("cells_street_live.json")["cells"]}
     fast = ride._route([a["lat"], a["lon"]], [b["lat"], b["lon"]], [], depart, no_freeways=True)
@@ -139,20 +141,41 @@ def plan(from_q, to_q, depart=None):
             "_route_dist": route_a.get("dist")}
 
 
+# Caltrans cams with a clear, wide road view that Genie 4 can extend (checked by eye on 2026-11-21);
+# the I-80 / Bay Bridge cams are too high, grey, or tangled with ramps
+GOOD_CAMS = ("TV313", "TV302", "TV301", "TV309", "TV314")  # best first
+
+
+def pick_sim(p, cams_now, cam_m=1200):
+    """Which flagged spot to simulate and which live camera seeds it (None = use the clearest 311 photo)."""
+    if not p.get("flagged"):
+        return None, None
+    meta = {c["id"]: c for c in p.get("cams", [])}
+    good = [dict(meta[c["cam"]], **c) for c in cams_now if c.get("available") and c.get("cam") in GOOD_CAMS and c["cam"] in meta]
+    best = None
+    for f in p["flagged"][:5]:
+        for c in good:
+            d = ride._dist_m((c["lat"], c["lon"]), (f["lat"], f["lon"]))
+            score = GOOD_CAMS.index(c["cam"]) * 500 + d   # a clearer camera beats a slightly closer one
+            if d <= cam_m and (best is None or score < best[3]):
+                best = (f, c, d, score)
+    if best:
+        return best[0], {**best[1], "dist_m": round(best[2])}
+    return p["flagged"][0], None
+
+
 def simulate(p, cams_now, session_holder):
     """Genie 4 at the most dangerous flagged spot, at the car's ETA; Carbon makes the final call."""
-    target = p["flagged"][0] if p["flagged"] else None
-    route = p["route"]
+    target, cam = pick_sim(p, cams_now)
+    online = [c for c in cams_now if c.get("available")]
     if not target:
         return {"skipped": True, "reason": "nothing flagged on this route"}
     k = min(range(len(p["fast"]["coords"])), key=lambda i: ride._dist_m(p["fast"]["coords"][i], (target["lat"], target["lon"])))
     eta = p["fast"]["times"][k]
-    online = [c for c in cams_now if c.get("available")]
-    cam = min(online, key=lambda c: ride._dist_m((c["lat"], c["lon"]), (target["lat"], target["lon"])), default=None)
-    if cam and ride._dist_m((cam["lat"], cam["lon"]), (target["lat"], target["lon"])) < 700:
-        seed_path, seed = cam["frame"], {"kind": "live camera", "label": cam["name"].split(" -- ")[-1], "t": cam["fetched_at"]}
+    if cam:
+        seed_path, seed = cam["frame"], {"kind": "live camera", "label": cam["name"].split(" -- ")[-1], "t": cam["fetched_at"], "dist_m": cam["dist_m"]}
     else:
-        ph = ride._car_photo("2026-11-18", target["lat"], target["lon"])
+        ph = ride._car_photo("2026-11-18", target["lat"], target["lon"], before=None)
         seed_path, seed = ph["path"], {"kind": "real 311 photo", "label": ph["address"], "t": ph["t"], "dist_m": ph["dist_m"]}
     mm = next((h["mm"] for h in p["forecast"] if h["t"][:13] == eta[:13]), 0)
     from gem.world import GenieSession

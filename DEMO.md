@@ -42,7 +42,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 ## 2:30 – 3:00 · It works today (switch to the Plan a trip tab)
 
-**Screen:** type two places (or ask a judge for two), press Go.
+**Screen:** press Go on Noe Valley → Chase Center (or ask a judge for two places). Genie starts from the live Caltrans camera US-101 at 23rd St.
 
 **Say:** "And it runs live. Any two places in San Francisco. It pulls flood reports from the last three days, tonight's forecast, live lane closures and live Caltrans cameras, simulates the worst spot with Genie 4, and Carbon decides. Same loop works for any hazard a robotaxi struggles with: floods today, construction zones next, which is exactly why Waymo got pulled off California freeways."
 
@@ -53,7 +53,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 - **Genie slow or down:** the simulation falls back to a real cached Genie run of Franklin and Geary. Nothing to say.
 - **Carbon slow:** after 8 seconds a rule-based fallback decides, with the same card. Nothing to say.
 - **Wi-Fi dies:** play the backup screen recording. Record one full Replay run before the demo.
-- **A Plan-a-trip address isn't found:** use "Noe Valley" → "Moscone Center".
+- **A Plan-a-trip address isn't found:** use "Noe Valley" → "Chase Center".
 
 ## Likely judge questions
 
