@@ -103,28 +103,8 @@ def plan(from_q, to_q, depart=None):
         ends |= {f"r{r_+dr}_c{c_+dc}" for dr in (-2, -1, 0, 1, 2) for dc in (-2, -1, 0, 1, 2)}
     closed_cells = {R._cell(la, lo) for c in cl if c["impact"] == "all-lanes-closed" for la, lo in R._densify(c["line"], 30)}
     avoid = [f["cell"] for f in flagged] + sorted(closed_cells - ends)
-    route_a = fast
-    if flagged or closed_cells:
-        for keep in (len(avoid), 10, 5):
-            try:
-                route_a = ride._route([a["lat"], a["lon"]], [b["lat"], b["lon"]], [x for x in avoid if x not in ends][:keep], depart, no_freeways=True)
-                break
-            except Exception:
-                continue
+    route_a = fast   # the car starts on the fastest route; it only reroutes after it simulates a spot ahead
     pre = None
-    if flagged or closed_cells:
-        pre = ride.decide({
-            "moment": "before pickup: choose the route for a real trip",
-            "trip": {"from": a["label"], "to": b["label"], "depart": depart},
-            "fastest_route": {"minutes": fast["min"], "flagged_spots": [
-                {"street": f["name"], "flood_reports_last_72h": len(f["notices"]), "past_storms_with_street_flooding": f.get("n_storm_days", 0)}
-                for f in flagged]},
-            "lane_closures_on_fastest_route": [{k: c[k] for k in ("street", "from", "to", "impact")} for c in cl][:6],
-            "alternative_route": {"minutes": route_a["min"], "extra_minutes": round(route_a["min"] - fast["min"], 1)},
-            "live_forecast": {"next_6h_mm": six},
-            "options": {"reroute": "take the alternative route", "keep_route": "take the fastest route"}})
-        if pre["action"] == "keep_route":
-            route_a = fast
     cams = LR.cams_near(route_a, fast)
     try:
         allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in notices()]
@@ -138,7 +118,7 @@ def plan(from_q, to_q, depart=None):
             "rain_today_mm": round(sum(h["mm"] for h in hours if h["t"][:10] == depart[:10]), 1), "forecast": [h for h in hours if h["t"] >= depart[:13] + ":00"][:8],
             "six_h_mm": six, "fast": ride._strip(fast), "route": ride._strip(route_a), "pre_decision": pre,
             "notices": nts, "memory": mem, "closures": cl, "flagged": flagged, "cams": cams, "avoid_cells": avoid,
-            "_route_dist": route_a.get("dist")}
+            "_route_dist": route_a.get("dist"), "_ends": sorted(ends)}
 
 
 # Caltrans cams with a clear, wide road view that Genie 4 can extend (checked by eye on 2026-11-21);
@@ -216,15 +196,38 @@ def simulate(p, cams_now, session_holder):
         out_path = os.path.join("media", "renders", f"trip_{target['cell']}_{int(time.time())}.jpg")
         with open(os.path.join(ROOT, out_path), "wb") as f:
             f.write(frame)
+    return {"target": target, "eta": eta, "mm_eta": mm, "seed": seed, "seed_path": seed_path, "verdict": v, "frame": out_path,
+            "genie_first_frame_s": first_s, "total_s": round(time.time() - t0, 1), "online_cams": online[:4]}
+
+
+def decide_mid(p, sim, here, t_now, index):
+    """Mid-ride: after Genie 4 + Decision 1 judged the spot ahead, Carbon decides whether to reroute from HERE."""
+    target, fast = sim["target"], p["fast"]
+    excl = [x for x in p["avoid_cells"] if x not in set(p.get("_ends", []))]
+    alt = None
+    for keep in (len(excl), 8, 4, 2):
+        try:
+            alt = ride._route(here, [p["to"]["lat"], p["to"]["lon"]], excl[:keep], t_now, no_freeways=True)
+            break
+        except Exception:
+            continue
+    rest_min = round((datetime.fromisoformat(fast["times"][-1]) - datetime.fromisoformat(fast["times"][index])).total_seconds() / 60, 1)
+    cl_near = [c for c in p["closures"] if min(ride._dist_m((target["lat"], target["lon"]), b) for b in c["line"]) < 500]
     dec = ride.decide({
-        "moment": "final check before the car reaches the most dangerous spot",
-        "spot": target["name"], "reached_at": eta[11:16],
+        "moment": "mid-ride: the car is approaching a flagged spot and just simulated it; decide now, no human",
+        "now": t_now[11:16], "spot_ahead": target["name"], "reached_at": sim["eta"][11:16],
         "flood_reports_last_72h": [{"t": n["t"], "address": n["address"]} for n in target["notices"]][:5],
         "past_storms_with_street_flooding": target.get("n_storm_days", 0),
-        "forecast_mm_that_hour": mm, "six_hour_mm": p["six_h_mm"],
-        "live_cameras_now": [{"camera": c["name"], **(c.get("verdict") or {})} for c in online][:4],
-        "genie4_simulation_judged_by_decision1": v, "simulation_seed": seed,
-        "current_plan": "route avoids the flagged spots" if p["route"]["coords"] != p["fast"]["coords"] else "fastest route",
-        "options": {"reroute": "avoid this spot (take or keep the flood-aware route)", "keep_route": "the current plan is fine"}})
-    return {"target": target, "eta": eta, "mm_eta": mm, "seed": seed, "seed_path": seed_path, "verdict": v, "frame": out_path,
-            "genie_first_frame_s": first_s, "total_s": round(time.time() - t0, 1), "decision": dec}
+        "lane_closures_near_spot": [{k: c[k] for k in ("street", "from", "to", "impact")} for c in cl_near][:4],
+        "live_forecast": {"mm_in_the_hour_the_car_arrives": sim.get("mm_eta"), "six_hour_mm": p["six_h_mm"]},
+        "live_cameras_now": [{"camera": c["name"], **(c.get("verdict") or {})} for c in sim.get("online_cams", [])],
+        "genie4_simulation_judged_by_decision1": sim.get("verdict"), "simulation_seed": sim.get("seed"),
+        "current_route_remaining_minutes": rest_min,
+        "alternative_route": {"minutes": alt["min"], "eta_change_min": round(alt["min"] - rest_min, 1)} if alt else None,
+        "options": {"reroute": "switch to the alternative route now", "keep_route": "stay on the fastest route"}})
+    if dec["action"] == "reroute" and alt:
+        route = ride._strip(alt)
+    else:
+        dec["action"] = "keep_route" if not alt else dec["action"]
+        route = {**ride._strip(fast), "coords": fast["coords"][index:], "times": fast["times"][index:]}
+    return {"decision": dec, "route": route}

@@ -263,7 +263,14 @@ class Handler(SimpleHTTPRequestHandler):
                 out = trip.simulate(TRIP["plan"], TRIP.get("cams", []), GENIE)
                 if GENIE["session"]:
                     GENIE["session"].stop()
-                return self.send_json(out)
+                TRIP["sim"] = out
+                return self.send_json({k: v for k, v in out.items() if k != "online_cams"})
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
+        if u.path == "/api/trip/decide":
+            from pipeline import trip
+            try:
+                return self.send_json(trip.decide_mid(TRIP["plan"], TRIP["sim"], b["here"], b["t"], int(b["index"])))
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/live/plan":

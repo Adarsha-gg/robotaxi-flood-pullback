@@ -91,7 +91,7 @@ async function go() {
     if (!P || P.error || !P.fast) { card('Could not plan', esc(P?.error || 'Could not reach the server')); state('error'); return; }
     $('tripName').textContent = `${short(P.from.label)} → ${short(P.to.label)}`;
     $('clock').textContent = hm(P.depart);
-    const fast = P.fast, R = P.route;
+    const fast = P.fast;
     abpin(P.from.lat, P.from.lon, 'A · ' + short(P.from.label)); abpin(P.to.lat, P.to.lon, 'B · ' + short(P.to.label));
     fastLine(fast.coords);
     map.fitBounds(L.latLngBounds(fast.coords), PAD);
@@ -126,17 +126,6 @@ async function go() {
     if (!alive()) return;
     collapse(`<b>Scanned the route</b> · ${parts.join(' · ') || 'all clear'}`);
 
-    // Carbon route choice
-    legend('lgRoute');
-    await drawLine(lay.route, R.coords, {color: '#2fd18b', weight: 7, opacity: .95}, 1000);
-    const D1 = P.pre_decision, dA = R.min - fast.min, dt = `${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`;
-    const x4 = card('Route decision · no human', D1 ? esc(D1.headline) : 'Fastest route is clear', D1 ? `${actPill(D1.action)}<span class="pill p-info">${dt}</span>` : '');
-    if (D1) x4.innerHTML = why(D1);
-    say(D1 ? (D1.action === 'reroute' ? `Carbon took a safer route · ${dt}` : 'Carbon kept the fastest route') : 'Route is clear');
-    await sleep(3600);
-    if (!alive()) return;
-    collapse(`<b>Carbon ${D1 && D1.action === 'reroute' ? 'rerouted' : 'kept the route'}</b> · ${dt}`);
-
     // live cameras
     if (P.cams.length) {
       state('looking'); say('Looking through live cameras…');
@@ -155,54 +144,93 @@ async function go() {
       collapse(`<b>Live cameras</b> · ${on} of ${cams.length} online`);
     }
 
-    // Genie simulation of the worst spot, on the stage
-    let S = null;
-    if (P.flagged.length && alive()) {
-      const T = P.flagged.find(f => f.cell === PICK.sim_target) || P.flagged[0];
-      state('simulating', true);
+    // start driving the fastest route; simulate only when a flagged spot comes up ahead
+    if (!alive()) return;
+    lay.fx.clearLayers();
+    legend('lgRoute');
+    const T = P.flagged.find(f => f.cell === PICK.sim_target) || P.flagged[0];
+    map.flyToBounds(L.latLngBounds(fast.coords), {...PAD, duration: 1});
+    const trail = L.polyline([fast.coords[0]], {color: '#2fd18b', weight: 7, opacity: .95}).addTo(lay.route);
+    const car = L.marker(fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+    const tmin = fast.times.map(toMin);
+    const near = (R0, la, lo) => R0.coords.reduce((bi, c, i) => (Math.hypot(c[0] - la, c[1] - lo) < Math.hypot(R0.coords[bi][0] - la, R0.coords[bi][1] - lo) ? i : bi), 0);
+    async function driveTo(Rt, i0, i1, msPerMin, line) {
+      const mins = Rt.times.map(toMin); let v = mins[i0], last = performance.now(), i = i0;
+      while (alive() && v < mins[i1]) {
+        const now = performance.now(); v = Math.min(mins[i1], v + (now - last) / msPerMin); last = now;
+        while (i < i1 - 1 && mins[i + 1] <= v) { i++; line && line.addLatLng(Rt.coords[i]); }
+        car.setLatLng(Rt.coords[i]); $('clock').textContent = fmt(v); await sleep(33);
+      }
+      car.setLatLng(Rt.coords[i1]); line && line.addLatLng(Rt.coords[i1]); return i1;
+    }
+    state('driving'); say('Driving the fastest route · watching what is ahead');
+    let idx = 0, R = fast, D = null;
+    if (T) {
+      const kT = near(fast, T.lat, T.lon);
+      const stop = Math.max(1, tmin.findLastIndex(m => m <= tmin[kT] - 2.5));
+      idx = await driveTo(fast, 0, Math.min(stop, kT), 900, trail);
+      if (!alive()) return;
+      // something flagged ahead: slow down and simulate it
+      const mins = Math.max(1, Math.round(tmin[kT] - tmin[idx]));
       pulse(T.lat, T.lon, title(T.name));
+      say(`${title(T.name)} ahead in ~${mins} min · ${T.notices.length ? plural(T.notices.length, 'flood report') + ' · ' : ''}${T.n_storm_days || 0} past floods`);
+      card('Ahead on the route', `${esc(title(T.name))} in ~${mins} min`,
+        `${T.notices.length ? `<b style="color:var(--text)">${plural(T.notices.length, 'flood report')}</b> in the last 3 days, and ` : ''}water on this street in <b style="color:var(--text)">${T.n_storm_days || 0} past storms</b>. The car slows and simulates it.`);
+      state('slowing · simulating ahead', true);
       map.flyTo([T.lat, T.lon], 15, {duration: 1});
+      await sleep(2400);
+      if (!alive()) return;
       card('Simulating with Genie 4', esc(title(T.name)), 'Built from a real image. Played forward to the minute the car would arrive.');
-      await sleep(1000);
-      const k = fast.coords.reduce((bi, c, i) => (Math.hypot(c[0] - T.lat, c[1] - T.lon) < Math.hypot(fast.coords[bi][0] - T.lat, fast.coords[bi][1] - T.lon) ? i : bi), 0);
-      const sc = CAMS.find(c => c.cam === PICK.sim_cam && c.available && c.frame), seedCam = sc ? {c: sc} : null;
-      const etaT = fast.times[k], fh = P.forecast.find(h => h.t.slice(0, 13) === etaT.slice(0, 13));
-      stageOpen(title(T.name), hm(etaT), seedCam ? '/' + seedCam.c.frame : '', seedCam ? `Live camera now · ${camName(seedCam.c)} · ${hm(P.depart)} · ${PICK.sim_cam_dist} m away` : '',
+      const sc = CAMS.find(c => c.cam === PICK.sim_cam && c.available && c.frame);
+      const etaT = fast.times[kT], fh = P.forecast.find(h => h.t.slice(0, 13) === etaT.slice(0, 13));
+      stageOpen(title(T.name), hm(etaT), sc ? '/' + sc.frame : '', sc ? `Live camera now · ${camName(sc)} · ${hm(P.depart)} · ${PICK.sim_cam_dist} m away` : '',
         `Live forecast when the car gets there (${hm(etaT)}): ${fh ? fh.mm : 0} mm of rain that hour · ${P.six_h_mm} mm in 6 h`);
       let done = false;
       const simP = post('/api/trip/simulate'); simP.then(() => { done = true; });
       waitGenieLive(() => done || !alive());
-      S = await simP; done = true;
+      const S = await simP; done = true;
       post('/api/genie/stop');
       if (!alive()) { stageClose(); return; }
-      if (S.error) { stageClose(); card('Simulation failed', esc(S.error)); }
+      if (S.error) { await stageClose(); card('Simulation failed', esc(S.error)); }
       else {
-        if (S.seed_path && !seedCam) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
-        if ($('stage').querySelector('h2')) $('stage').querySelector('h2').textContent = `${title(T.name)} at ${hm(S.eta)}`;
+        // Carbon starts deciding the moment the simulation is judged
+        const here = fast.coords[idx];
+        const DP = post('/api/trip/decide', {here, t: fast.times[idx], index: idx});
+        if (S.seed_path && !sc) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
         stageResult(S.frame, hm(S.eta), S.verdict, S.total_s);
         await sleep(3600);
         await stageClose();
         collapse(`<b>Simulated ${esc(title(T.name))}</b> · ${esc(S.verdict?.depth_label || '')}`);
-        const D = S.decision;
-        if (D) {
-          const x7 = card('Final decision · no human', esc(D.headline), actPill(D.action));
+        say('Gemini 4 Carbon is deciding…');
+        const DR = await DP;
+        if (!alive()) return;
+        if (DR.error) card('Decision failed', esc(DR.error));
+        else {
+          D = DR.decision; R = DR.route;
+          const dEta = toMin(R.times.at(-1)) - tmin.at(-1);
+          const x7 = card('Decision · no human', esc(D.headline), `${actPill(D.action)}<span class="pill p-info">ETA ${hm(R.times.at(-1))} (${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min)</span>`);
           x7.innerHTML = why(D);
-          say(D.headline);
-          await sleep(3000);
+          say(D.action === 'reroute' ? `Rerouted around ${title(T.name)}. The car never stopped.` : `Keeping the route: ${D.headline}`);
+          if (D.action === 'reroute') {
+            const t2 = L.polyline([R.coords[0]], {color: '#2fd18b', weight: 7, opacity: .95}).addTo(lay.route);
+            map.flyToBounds(L.latLngBounds([...R.coords, ...fast.coords.slice(idx)]), {...PAD, duration: 1});
+            await sleep(800);
+            state('driving');
+            await driveTo(R, 0, R.coords.length - 1, 500, t2);
+          }
         }
       }
     }
-
-    // drive the chosen route
+    if (!alive()) return;
+    if (!D || D.action !== 'reroute') {
+      if (!T) say('Nothing flagged ahead · driving the fastest route');
+      state('driving');
+      map.flyToBounds(L.latLngBounds(fast.coords), {...PAD, duration: 1});
+      await driveTo(fast, idx, fast.coords.length - 1, 500, trail);
+    }
     if (!alive()) return;
     lay.fx.clearLayers();
-    map.flyToBounds(L.polyline(R.coords).getBounds(), {...PAD, duration: 1});
-    const car = L.marker(R.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
-    state('driving'); say('Driving');
-    const t0 = performance.now(), dur = 6000, m0 = toMin(R.times[0]), m1 = toMin(R.times.at(-1));
-    while (alive()) { const f = Math.min(1, (performance.now() - t0) / dur), i = Math.min(R.coords.length - 1, Math.floor(f * (R.coords.length - 1)));
-      car.setLatLng(R.coords[i]); $('clock').textContent = fmt(m0 + (m1 - m0) * f); if (f >= 1) break; await sleep(33); }
-    state('arrived'); say(`Arrived ${hm(R.times.at(-1))}`);
+    state('arrived'); say(`Arrived ${hm(R.times.at(-1))}${D && D.action === 'reroute' ? ' · never stopped' : ''}`);
   } catch (err) {
     card('Trip error', esc(err.message || String(err))); state('error');
   } finally {
