@@ -27,6 +27,7 @@
     <div class="hud stage" id="stage"></div>
     <div class="hud caption" id="caption"></div>
     <div class="hud legend">
+      <span id="lgFast"><i class="l-fast"></i>fastest route (not taken)</span>
       <span id="lgRoute"><i class="l-route"></i>route the car takes</span>
       <span id="lgFlood"><i class="l-flood"></i>flood reported to 311, last 3 days</span>
       <span id="lgWater"><i class="l-water"></i>street that floods in heavy rain</span>
@@ -76,8 +77,8 @@ async function go() {
     $('clock').textContent = hm(P.depart);
     const fast = P.fast, R = P.route;
     abpin(P.from.lat, P.from.lon, 'A · ' + short(P.from.label)); abpin(P.to.lat, P.to.lon, 'B · ' + short(P.to.label));
-    const fl = L.polyline(fast.coords, {color: '#ffffff', weight: 4, opacity: .85}).addTo(lay.fast);
-    map.fitBounds(fl.getBounds(), PAD);
+    fastLine(fast.coords);
+    map.fitBounds(L.latLngBounds(fast.coords), PAD);
     collapse(`<b>Fastest route</b> · ${esc(short(P.from.label))} → ${esc(short(P.to.label))} · ${fast.km} km · ${Math.round(fast.min)} min`);
 
     // scan
@@ -97,7 +98,6 @@ async function go() {
     collapse(`<b>Scanned the route</b> · ${parts.join(' · ') || 'all clear'}`);
 
     // Carbon route choice
-    lay.fast.clearLayers(); L.polyline(fast.coords, {color: '#7b8494', weight: 2, opacity: .6, dashArray: '6 6'}).addTo(lay.fast);
     legend('lgRoute');
     await drawLine(lay.route, R.coords, {color: '#2fd18b', weight: 7, opacity: .95}, 1000);
     const D1 = P.pre_decision, dA = R.min - fast.min, dt = `${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`;

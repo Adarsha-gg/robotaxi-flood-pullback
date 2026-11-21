@@ -10,35 +10,35 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 **Say:** "Three days ago, on November 18, San Francisco had its worst street-flooding day on record: 778 reports to 311. At 11 AM Waymo paused the whole city because robotaxis drove into flooded streets. They only react after a car is stuck. We built the part that looks ahead."
 
-## 0:20 – 0:45 · Before pickup (press ▶ Start ride)
+## 0:20 – 0:50 · Before pickup: it is already flooding (press ▶ Start ride)
 
-**Screen:** the fastest route draws, three blue dots appear, the route turns into a green flood-aware route.
+**Screen:** 09:50. Red dots fill the map: 77 real 311 street-flood reports so far. Three real resident photos appear in the panel (199 Jones St, 204 Park Presidio, 3411 20th St). The fastest route draws, then the green flood-aware route.
 
-**Say:** "8:58 AM. Before pickup, the car checks the fastest route against the night-before forecast and every street that has flooded in past storms. Laguna and Oak, Fell and Masonic, Ashbury and Fell have flooded 14 to 16 times each. Gemini 4 Carbon picks a route around them. It costs half a minute."
+**Say:** "9:50 AM. 77 streets have already been reported flooded to 311 this morning. These are the real photos residents sent. Three of those reports sit right on the fastest route, and three more streets on it, Laguna and Oak, Fell and Masonic, Ashbury and Fell, have flooded in 14 to 16 past storms. Gemini 4 Carbon routes around all six. It's even 0.4 minutes faster."
 
-## 0:45 – 1:05 · Mid-ride, the forecast changes
+## 0:50 – 1:10 · Mid-ride, the forecast changes
 
-**Screen:** caption "New forecast: 8.6 mm of rain in the next hour". The car slows. Blue dot and orange dashed line appear at Grove and Van Ness.
+**Screen:** caption "New forecast: 8.6 mm of rain in the next hour", new red dots pop in. Pulse at Franklin & Geary.
 
-**Say:** "Three minutes in, a newer forecast lands: 8.6 millimeters in an hour. Ahead is Grove and Van Ness. The street has flooded in 8 past storms, and right next to it, 5 permitted lane closures are active on Van Ness and Fell. That is exactly the kind of spot where cars get stuck."
+**Say:** "Three minutes in, a newer forecast lands, and 14 new reports come in. Ahead is Franklin and Geary. It has flooded in 20 past storms, and two reports came in within 500 meters this morning."
 
-## 1:05 – 1:40 · Simulate the street (Genie 4 + Decision 1)
+## 1:10 – 1:40 · Simulate the street (Genie 4 + Decision 1)
 
-**Screen:** real resident photo on the left, Genie 4 on the right, then the meters fill: SLOW, water across most of the lane.
+**Screen:** Genie 4 fills the screen, built from the 199 Jones St photo (inset, 09:10). Then the meters.
 
-**Say:** "The car can't see four blocks ahead. So Genie 4 builds that street, starting from a real photo a resident sent to 311 that morning, and plays the forecast forward to the minute the car would get there. Decision 1 then asks car questions, not human questions: is water across the travel lane, does it reach the tire sidewall, are the lane edges hidden. Answer: slow, water across most of the lane."
+**Say:** "The car can't see that street yet. So Genie 4 builds it from the clearest real photo nearby, sent to 311 at 9:10, and plays it forward to the minute the car arrives. Decision 1 asks car questions: is water across the travel lane, does it reach the tire sidewall, are the lane edges hidden."
 
 ## 1:40 – 2:05 · The decision, with no human
 
-**Screen:** green route redraws from where the car is; the card shows REROUTE, three reasons, and the rider message. The car never stops.
+**Screen:** REROUTE card with two reasons and the rider message. The car never stops.
 
-**Say:** "No human approves anything. Gemini 4 Carbon reads the forecast, the flood history, the closures and the simulation, and decides in a few seconds: reroute. It even tells the rider why. The new route is also faster. The car never stopped."
+**Say:** "No human approves anything. Carbon starts deciding the moment the simulation is judged, reads the live reports, history, forecast and simulation, and reroutes. It tells the rider why. The car never stopped."
 
-## 2:05 – 2:30 · What really happened
+## 2:05 – 2:30 · Did it work?
 
-**Screen:** clock fast-forwards to noon, red dots land on the fastest route, counter shows 37 vs 13, caption "11:00 Waymo paused all San Francisco service".
+**Screen:** clock runs to 11:50; counter 35 vs 16 (real 311 reports in the next 2 hours); caption "11:00 Waymo paused all San Francisco service".
 
-**Say:** "Now the real 311 reports from that morning. 37 street floods on the fastest route, 13 on ours. The first one hit at 9:35 on Webster Street. At 11, Waymo paused the city. This car finished its trip. And this isn't one lucky storm: across 15 past storms, the same flood memory caught 45% of flooded blocks while covering 8% of the city."
+**Say:** "And the check: in the next two hours, 35 floods were reported on the fastest route, 16 on ours. At 11, Waymo paused the city. Across 15 past storms, the same flood memory caught 45% of flooded blocks while covering 8% of the city."
 
 ## 2:30 – 3:00 · It works today (switch to the Plan a trip tab)
 
@@ -50,7 +50,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 ## If something breaks
 
-- **Genie slow or down:** the simulation falls back to a real cached Genie run of Grove and Van Ness. Nothing to say.
+- **Genie slow or down:** the simulation falls back to a real cached Genie run of Franklin and Geary. Nothing to say.
 - **Carbon slow:** after 8 seconds a rule-based fallback decides, with the same card. Nothing to say.
 - **Wi-Fi dies:** play the backup screen recording. Record one full Replay run before the demo.
 - **A Plan-a-trip address isn't found:** use "Noe Valley" → "Moscone Center".
@@ -58,7 +58,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 ## Likely judge questions
 
 - **"Is the Genie scene real?"** It is a simulation, seeded with a real resident photo or a live camera frame. The decision uses it as one input next to real data. We label it "simulated" everywhere.
-- **"Did you cheat with hindsight?"** No. Flood history stops the day before Nov 18, and the route decisions use the night-before forecast run and the same-day model run (Open-Meteo previous-runs archive). The 311 reports are only used afterwards, to score.
+- **"Did you cheat with hindsight?"** No. Flood history stops the day before Nov 18. The car only sees 311 reports and photos filed before each decision. Forecasts are the night-before and same-day model runs (Open-Meteo previous-runs archive). Reports after the decision are only used for the final check.
 - **"Human flooding vs car flooding?"** 311 separates street flooding from basement/property flooding. On Nov 18: 691 street, 87 property. The car only uses street reports, and the simulation questions are about the travel lane and the tires.
 - **"Why not just use Waymo's own sensors?"** Sensors see what is in front of the car now. This sees four blocks and twenty minutes ahead.
 - **"Does it cry wolf?"** On real Waymo camera footage of a rainy SF freeway (Waymo Open Dataset), the judge says "wet road, proceed" at 22–27%.

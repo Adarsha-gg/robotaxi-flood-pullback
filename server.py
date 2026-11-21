@@ -178,7 +178,7 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path == "/api/ride/plan":
             from pipeline import ride
             p = ride.plan(b.get("from", [37.7800, -122.4650]), b.get("to", [37.7765, -122.3946]),
-                          b.get("t", "2026-11-18T08:58"), b.get("date", "2026-11-18"))
+                          b.get("t", "2026-11-18T09:50"), b.get("date", "2026-11-18"))
             RIDE.clear()
             RIDE["plan"] = p
             return self.send_json({k: v for k, v in p.items() if not k.startswith("_")})
@@ -203,7 +203,7 @@ class Handler(SimpleHTTPRequestHandler):
             p, c = RIDE["plan"], RIDE.get("check") or {"risky_b": []}
             if GENIE["session"]:
                 GENIE["session"].stop()
-            excl = [r["cell"] for r in p["risky_a"]] + [r["cell"] for r in c["risky_b"]]
+            excl = [r["cell"] for r in p["risky_a"]] + [x["cell"] for x in p.get("live_a", [])] + [r["cell"] for r in c["risky_b"]]
             here, idx = b["here"], int(b.get("index", c.get("at_index", 0)))
             route_b = ride.reroute(p, here, b["t"], excl)
             rest_a_min = round((datetime.fromisoformat(p["route_a"]["times"][-1]) - datetime.fromisoformat(b["t"])).total_seconds() / 60, 1)
@@ -212,6 +212,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "moment": "mid-ride: newer forecast arrived; car is slowing while it decides",
                 "street_ahead": w.get("name"), "reached_at": (w.get("eta") or "")[11:16], "now": b["t"][11:16],
                 "street_flood_history": {"past_storms_with_street_flooding": w.get("n_storm_days"), "latest": (w.get("storm_days") or [])[:3]},
+                "live_311_street_flood_reports_within_500m_so_far_today": [{"time": e["t"][11:16], "address": e["address"]} for e in (w.get("live_near") or [])][-6:],
                 "permitted_lane_closures_here": [{k: x[k] for k in ("street", "from", "to", "impact", "type", "start", "end")} for x in (w.get("closures") or [])],
                 "forecast": {"source": c.get("forecast_source"), "next_hour_mm": (c.get("peak") or {}).get("mm"), "six_hour_mm": c.get("six_h_mm")},
                 "genie4_simulation_judged_by_decision1": sim,

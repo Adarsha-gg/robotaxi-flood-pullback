@@ -89,18 +89,48 @@ def _strip(r):
     return {k: v for k, v in r.items() if k != "dist"}
 
 
-def plan(frm, to, t="2026-11-18T08:58", date="2026-11-18"):
+# the clearest real street photos sent to 311 that morning (landscape road views Genie can build from)
+LIVE_PHOTOS = ("199 JONES ST", "204 PARK PRESIDIO BLVD", "3411 20TH ST", "1200 26TH AVE")
+
+
+def live_reports(date, t, since="07:00"):
+    """REAL 311 street-flooding reports already filed at time t (what a fleet would see live)."""
+    ev = [e for e in _j(f"events_{date}.json", []) if e.get("where", "street") == "street"]
+    return [e for e in ev if f"{date}T{since}" <= e["t"] <= t]
+
+
+def live_photos(date, t, n=3):
+    ph = {p["address"].upper().replace(", VIRTUAL", ""): p for p in (_j(f"photos_{date}.json") or [])}
+    out = [ph[a] for a in LIVE_PHOTOS if a in ph and ph[a]["t"] <= t]
+    return [{k: p[k] for k in ("t", "address", "lat", "lon", "path")} for p in out[:n]]
+
+
+def _live_on(route, live, m=120):
+    """Live reports within m metres of the route, grouped by grid cell."""
+    by = {}
+    for e in live:
+        if min(_dist_m((e["lat"], e["lon"]), c) for c in route["coords"][::2]) <= m:
+            by.setdefault(e["cell"], []).append(e)
+    return [{"cell": c, "lat": es[0]["lat"], "lon": es[0]["lon"], "name": es[0]["address"], "n": len(es),
+             "last": max(x["t"] for x in es)} for c, es in by.items()]
+
+
+def plan(frm, to, t="2026-11-18T09:50", date="2026-11-18"):
     cells = {c["id"]: c for c in (_j("cells_street.json") or _j("cells.json"))["cells"]}
     fc_night = _j(f"forecast_{date}.json")
     fast = _route(frm, to, [], t)
     six_a = _six(fc_night, "2026-11-18T08:00")
     risky_a = _scan(fast, cells, six_a, A_MIN_STORMS, 0.12, 0.9)[:4]
-    route_a = _route(frm, to, [r["cell"] for r in risky_a], t) if risky_a else fast
-    pre = decide_pre_trip(fast, route_a, risky_a, six_a, fc_night) if risky_a else None
+    live = live_reports(date, t)
+    live_a = [x for x in _live_on(fast, live) if x["cell"] not in {r["cell"] for r in risky_a}][:4]
+    excl = [r["cell"] for r in risky_a] + [x["cell"] for x in live_a]
+    route_a = _route(frm, to, excl, t) if excl else fast
+    pre = decide_pre_trip(fast, route_a, risky_a, six_a, fc_night, live_a, len(live)) if excl else None
     if pre and pre["action"] == "keep_route":
         route_a = fast
     return {"from": frm, "to": to, "t": t, "date": date, "pre_decision": pre,
-            "fast": _strip(fast), "route_a": _strip(route_a), "risky_a": risky_a,
+            "fast": _strip(fast), "route_a": _strip(route_a), "risky_a": risky_a, "live_a": live_a,
+            "live": [{k: e[k] for k in ("t", "lat", "lon", "address")} for e in live], "live_photos": live_photos(date, t),
             "pre_trip": {"forecast_source": fc_night["source"], "six_h_mm": six_a,
                          "day_total_mm": fc_night["total_mm"],
                          "hours": [h for h in fc_night["hours"] if "06:00" <= h["t"][11:16] <= "12:00"]},
@@ -121,27 +151,33 @@ def check(p, at_index, min_frac=0.0):
                     skip={r["cell"] for r in p["risky_a"]})[:4]
     # simulate the strongest block that has a real street-level photo close by
     for r in risky_b:
-        r["photo"] = _car_photo(p["date"], r["lat"], r["lon"])
+        r["photo"] = _car_photo(p["date"], r["lat"], r["lon"], before=t_now)
     near = [r for r in risky_b if r["photo"] and r["photo"]["dist_m"] <= 900]
     watch = dict((near or risky_b)[0]) if risky_b else None
     ahead_coords = ra["coords"][at_index:]
     cl = closures_near(ahead_coords, closures(p["date"], t_now, p["route_a"]["times"][-1]))
+    live_now = live_reports(p["date"], t_now)
     if watch:
+        watch["live_near"] = [{k: e[k] for k in ("t", "lat", "lon", "address")} for e in live_now
+                              if _dist_m((e["lat"], e["lon"]), (watch["lat"], watch["lon"])) <= 500]
         watch["closures"] = [c for c in cl if min(_dist_m((watch["lat"], watch["lon"]), b) for b in c["line"]) < 500]
-    return {"t": t_now, "at_index": at_index, "closures_ahead": cl, "forecast_source": fc_latest["source"], "next_hours": hrs,
+    return {"t": t_now, "at_index": at_index, "closures_ahead": cl,
+            "live_new": [{k: e[k] for k in ("t", "lat", "lon", "address")} for e in live_now if e["t"] > p["t"]], "forecast_source": fc_latest["source"], "next_hours": hrs,
             "peak": peak, "six_h_mm": six_b, "risky_b": risky_b, "watch": watch}
 
 
-def _car_photo(date, lat, lon):
-    """Nearest real 311 photo that shows the ROADWAY (prefer ones with cars in the water)."""
+def _car_photo(date, lat, lon, before=None):
+    """Clearest nearby real 311 photo that shows the ROADWAY, filed before `before` (no hindsight)."""
     photos = _j(f"photos_{date}.json") or _j("photos_2026-11-18.json", [])
     photos = [p for p in photos if not p["address"].upper().startswith(BAD_PHOTOS)
-              and os.path.exists(os.path.join(ROOT, p["path"]))]
+              and os.path.exists(os.path.join(ROOT, p["path"])) and (not before or p["t"] <= before)]
     road = [p for p in photos if (p.get("road_view") or 0) >= 0.6] or photos  # car's-eye photos only
     if not road:
         return None
     # nearest road-view photo; a car in the water nearby is a strong tiebreaker
-    p = min(road, key=lambda p: _dist_m((p["lat"], p["lon"]), (lat, lon)) - 300 * (p.get("cars_in_water") or 0))
+    # clarity first: a sharp road view a bit farther away beats a murky one next door
+    p = min(road, key=lambda p: _dist_m((p["lat"], p["lon"]), (lat, lon)) - 1500 * (p.get("road_view") or 0)
+            - 300 * (p.get("cars_in_water") or 0))
     return {**p, "dist_m": round(_dist_m((p["lat"], p["lon"]), (lat, lon)))}
 
 
@@ -247,7 +283,7 @@ def reroute(p, here, t_now, excl):
     raise RuntimeError("router refused every exclusion set")
 
 
-def proof(p, driven_coords, after_t, hours=3):
+def proof(p, driven_coords, after_t, hours=2):
     """REAL street-flooding reports on the fastest route vs the route actually driven."""
     ev = [e for e in _j(f"events_{p['date']}.json", []) if e.get("where", "street") == "street"]
     end = (datetime.fromisoformat(after_t) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -322,9 +358,11 @@ def _decide_direct(ctx):
     return out
 
 
-def decide_pre_trip(fast, alt, risky, six_mm, fc):
+def decide_pre_trip(fast, alt, risky, six_mm, fc, live_a=(), live_n=0):
     return decide({
         "moment": "before pickup: choose the route",
+        "live_311_street_flood_reports": {"citywide_so_far_today": live_n, "on_fastest_route": [
+            {"street": x["name"], "reports": x["n"], "latest": x["last"][11:16]} for x in live_a]},
         "fastest_route": {"minutes": fast["min"], "street_flood_blocks_on_it": [
             {"street": r["name"], "past_storms_with_street_flooding": r["n_storm_days"], "latest": r["storm_days"][:3],
              "flood_threshold_6h_mm": r["thresh_mm_6h"], "reached_at": r["eta"][11:16]} for r in risky]},

@@ -71,6 +71,12 @@ function pulse(lat, lon, label) {
   L.marker([lat, lon], {icon: L.divIcon({className: '', iconSize: [44, 44], iconAnchor: [22, 22], html: '<div class="ring"></div>'})}).addTo(lay.fx);
   if (label) L.marker([lat, lon], {icon: L.divIcon({className: '', html: `<div class="pin">${esc(label)}</div>`, iconAnchor: [-18, 14]})}).addTo(lay.fx);
 }
+function fastLine(coords) {   // the fastest route, not taken: red dashes with a label
+  legend('lgFast');
+  L.polyline(coords, {color: '#ff4d5e', weight: 4, opacity: .9, dashArray: '2 9', lineCap: 'round'}).addTo(lay.fast);
+  const m = coords[Math.floor(coords.length * .55)];
+  L.marker(m, {icon: L.divIcon({className: '', html: '<div class="pin fast">Fastest route</div>', iconAnchor: [-12, 26]})}).addTo(lay.fast);
+}
 async function drawLine(group, coords, style, ms) {
   const pl = L.polyline([], style).addTo(group), n = coords.length, t0 = performance.now();
   while (true) { const f = Math.min(1, (performance.now() - t0) / ms); pl.setLatLngs(coords.slice(0, Math.max(2, Math.ceil(n * f)))); if (f >= 1) break; await sleep(25); }
