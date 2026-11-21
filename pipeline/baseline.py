@@ -112,7 +112,8 @@ def main():
     zones = []
     for comp in components(list(by_id)):
         cs = [by_id[i] for i in comp]
-        thresh = min(c["thresh_mm_6h"] for c in cs)
+        ths = sorted(c["thresh_mm_6h"] for c in cs)
+        thresh = ths[len(ths) // 2]  # median threshold of the zone
         idx = [i for i, v in enumerate(s6) if v >= thresh]
         if not idx:
             continue

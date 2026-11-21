@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flood Pull-Back</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#0b0d10;--panel:#13161b;--line:#242a33;--text:#e8eaed;--muted:#8a919c;
+  --amber:#ffb020;--red:#ff4d4f;--green:#2fd18b;--blue:#4da3ff;--gray:#59606b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:17px;margin:0}h1 b{color:var(--blue)}
+.pill{border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted);font-size:12px}
+.seg button{background:none;border:1px solid var(--line);color:var(--muted);padding:4px 10px;cursor:pointer}
+.seg button.on{color:var(--text);border-color:var(--blue)}
+.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0}
+main{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
+#map{height:100%;background:var(--bg)}
+aside{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:12px}
+.score{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.score div{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
+.score b{display:block;font-size:22px}.score span{color:var(--muted);font-size:11px}
+.zone{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;cursor:pointer}
+.zone.sel{border-color:var(--blue)}
+.zone h3{margin:0 0 4px;font-size:13px;display:flex;justify-content:space-between;gap:6px}
+.zone p{margin:4px 0;color:var(--muted);font-size:12px}
+.zone .st{font-size:11px;padding:1px 6px;border-radius:4px}
+.st.proposed{background:#3a2c0a;color:var(--amber)}.st.approved{background:#3a1012;color:var(--red)}.st.rejected{background:#22262c;color:var(--gray)}
+.btns{display:flex;gap:6px;margin-top:6px}
+.btns button,.bar button{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 10px;cursor:pointer}
+.btns button.ok{border-color:var(--red)}
+footer{border-top:1px solid var(--line);padding:8px 16px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+.bar{display:flex;gap:10px;align-items:center}
+#clock{font:600 20px ui-monospace,Menlo,monospace;min-width:70px}
+#rain{width:100%;height:56px;display:block}
+#banner{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:999;background:#3a1012;border:1px solid var(--red);color:#ffd7d8;padding:8px 14px;border-radius:8px;font-weight:600;display:none}
+.legend{display:flex;gap:12px;color:var(--muted);font-size:12px;flex-wrap:wrap}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
+h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px}
+@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:55vh 1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Flood <b>Pull-Back</b></h1>
+  <span class="pill" id="datePill">San Francisco · 2026-11-18</span>
+  <span class="pill" id="srcPill">forecast: night before</span>
+  <div class="seg" id="setSeg"><button data-set="carbon">Gemini 4 Carbon</button><button data-set="baseline">Baseline</button></div>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--amber)"></span>proposed</span>
+    <span><span class="dot" style="background:var(--red)"></span>approved (cars avoid)</span>
+    <span><span class="dot" style="background:var(--green)"></span>flood caught</span>
+    <span><span class="dot" style="background:#fff"></span>flood missed</span>
+  </div>
+</header>
+<div id="banner">11:00 AM · Waymo paused all San Francisco service</div>
+<main>
+  <div id="map"></div>
+  <aside>
+    <div class="score">
+      <div><b id="sN">0</b><span>real floods so far</span></div>
+      <div><b id="sIn">0</b><span>inside approved zones</span></div>
+      <div><b id="sPct">–</b><span>caught</span></div>
+    </div>
+    <div class="bar"><button id="approveAll">Approve all proposed</button><button id="resetAll">Reset</button></div>
+    <h2 id="zoneHead">Zones</h2>
+    <div id="zones"></div>
+  </aside>
+</main>
+<footer>
+  <div class="bar"><button id="play">▶ Play</button><span id="clock">06:00</span></div>
+  <div><canvas id="rain"></canvas>
+    <div class="legend"><span><span class="dot" style="background:var(--amber)"></span>night-before forecast (what zones used)</span><span><span class="dot" style="background:var(--blue)"></span>latest forecast</span><span>scrub: click the chart</span></div>
+  </div>
+</footer>
+<script>
+const DATE = new URLSearchParams(location.search).get('date') || '2026-11-18';
+const T0 = 6*60, T1 = 14*60, PLAY_MS = 40000;
+let SET = new URLSearchParams(location.search).get('set') || 'carbon';
+let zones = [], events = [], fcNight = null, fcLatest = null, grid = null;
+let clock = T0, playing = false, last = 0, selected = null;
+const map = L.map('map', {zoomControl: true, preferCanvas: true}).setView([37.765, -122.435], 13);
+const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {attribution: 'Tiles © Esri · 311 data: DataSF', maxZoom: 16}).addTo(map);
+L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16}).addTo(map);
+const zoneLayer = L.layerGroup().addTo(map), evLayer = L.layerGroup().addTo(map);
+const tmin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16);
+const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(url); return r.json(); }
+
+async function loadZones() {
+  const z = await j(`/api/zones?date=${DATE}&set=${SET}`);
+  SET = z.set; zones = z.zones;
+  document.querySelectorAll('#setSeg button').forEach(b => b.classList.toggle('on', b.dataset.set === SET));
+  document.getElementById('zoneHead').textContent = `Zones · ${z.generated_by} · ${zones.length}`;
+  drawZones(); renderList(); update();
+}
+
+function cellBounds(cid) {
+  const [r, c] = cid.slice(1).split('_c').map(Number);
+  const la = grid.lat0 + r * grid.dlat, lo = grid.lon0 + c * grid.dlon;
+  return [[la, lo], [la + grid.dlat, lo + grid.dlon]];
+}
+
+function drawZones() {
+  zoneLayer.clearLayers();
+  for (const z of zones) {
+    z._rects = z.cells.map(cid => L.rectangle(cellBounds(cid), {weight: 1}).on('click', () => select(z.id)).addTo(zoneLayer));
+  }
+  styleZones();
+}
+
+function active(z) { return clock >= tmin(z.start) && clock <= tmin(z.end); }
+
+function styleZones() {
+  for (const z of zones) {
+    const col = z.status === 'approved' ? '#ff4d4f' : z.status === 'rejected' ? '#59606b' : '#ffb020';
+    const on = active(z) && z.status !== 'rejected';
+    for (const r of z._rects || []) r.setStyle({color: col, fillColor: col, weight: z.id === selected ? 2.5 : 1,
+      opacity: on ? 0.9 : 0.35, fillOpacity: on ? (z.status === 'approved' ? 0.45 : 0.22) : 0.06,
+      dashArray: z.status === 'proposed' ? '3 3' : null});
+  }
+}
+
+function renderList() {
+  const el = document.getElementById('zones');
+  el.innerHTML = zones.slice(0, 40).map(z => `
+    <div class="zone ${z.id === selected ? 'sel' : ''}" data-id="${z.id}">
+      <h3><span>${esc(z.name)}</span><span class="st ${z.status}">${z.status}</span></h3>
+      <p>${z.start.slice(11, 16)}–${z.end.slice(11, 16)} · ${z.cells.length} cells · p=${z.p_flood}${z.source === 'camera' ? ' · from a car camera' : ''}</p>
+      <p>${esc(z.reason)}</p>
+      <div class="btns"><button class="ok" data-a="approved">Approve</button><button data-a="rejected">Reject</button></div>
+    </div>`).join('');
+  el.querySelectorAll('.zone').forEach(d => {
+    d.addEventListener('click', e => {
+      const a = e.target.dataset.a;
+      if (a) { e.stopPropagation(); setStatus([d.dataset.id], a); } else select(d.dataset.id);
+    });
+  });
+}
+
+function select(id) {
+  selected = id; styleZones(); renderList();
+  const z = zones.find(z => z.id === id);
+  if (z) map.fitBounds(L.featureGroup(z._rects).getBounds(), {maxZoom: 15, padding: [60, 60]});
+  document.querySelector(`.zone[data-id="${id}"]`)?.scrollIntoView({block: 'nearest'});
+}
+
+async function setStatus(ids, status) {
+  await j('/api/zones/approve', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date: DATE, set: SET, zone_ids: ids, status})});
+  for (const z of zones) if (ids.includes(z.id)) z.status = status;
+  styleZones(); renderList(); update(true);
+}
+
+function caught(e) {
+  return zones.some(z => z.status === 'approved' && z.cells.includes(e.cell) && tmin(e.t) >= tmin(z.start) && tmin(e.t) <= tmin(z.end));
+}
+
+function update(full) {
+  if (full) evLayer.clearLayers(), events.forEach(e => e._m = null);
+  let n = 0, inn = 0;
+  for (const e of events) {
+    const m = tmin(e.t);
+    if (m > clock) { if (e._m) { evLayer.removeLayer(e._m); e._m = null; } continue; }
+    n++; const c = caught(e); if (c) inn++;
+    if (!e._m) e._m = L.circleMarker([e.lat, e.lon], {radius: 3.5, weight: 1}).bindTooltip(`${e.t.slice(11, 16)} · ${esc(e.address)}`).addTo(evLayer);
+    e._m.setStyle({color: c ? '#2fd18b' : '#ffffff', fillColor: c ? '#2fd18b' : '#ffffff', fillOpacity: 0.85});
+  }
+  document.getElementById('sN').textContent = n;
+  document.getElementById('sIn').textContent = inn;
+  document.getElementById('sPct').textContent = n ? Math.round(100 * inn / n) + '%' : '–';
+  document.getElementById('clock').textContent = fmt(Math.floor(clock));
+  document.getElementById('banner').style.display = clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none';
+  styleZones(); drawRain();
+}
+
+function drawRain() {
+  const cv = document.getElementById('rain'), dpr = devicePixelRatio || 1;
+  const W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  if (!fcNight) return;
+  const hrs = fcNight.hours.length, bw = W / hrs, max = Math.max(...fcNight.hours.map(h => h.mm), ...(fcLatest?.hours || []).map(h => h.mm), 1);
+  fcNight.hours.forEach((h, i) => { g.fillStyle = '#ffb020'; const y = h.mm / max * (H - 12); g.fillRect(i * bw + 2, H - y, bw * 0.45, y); });
+  (fcLatest?.hours || []).forEach((h, i) => { g.fillStyle = '#4da3ff'; const y = h.mm / max * (H - 12); g.fillRect(i * bw + 2 + bw * 0.45, H - y, bw * 0.45, y); });
+  g.fillStyle = '#8a919c'; g.font = '10px system-ui';
+  for (let i = 0; i < hrs; i += 3) g.fillText(String(i).padStart(2, '0'), i * bw + 2, 10);
+  const x = clock / 60 * bw; g.fillStyle = '#e8eaed'; g.fillRect(x, 0, 2, H);
+}
+
+document.getElementById('rain').addEventListener('click', e => {
+  const r = e.target.getBoundingClientRect(); clock = Math.max(0, Math.min(24 * 60 - 1, (e.clientX - r.left) / r.width * 24 * 60)); update();
+});
+document.getElementById('play').onclick = () => {
+  playing = !playing; if (playing && clock >= T1) clock = T0;
+  document.getElementById('play').textContent = playing ? '❚❚ Pause' : '▶ Play'; last = performance.now(); requestAnimationFrame(tick);
+};
+function tick(now) {
+  if (!playing) return;
+  clock += (now - last) / PLAY_MS * (T1 - T0); last = now;
+  if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶ Play'; }
+  update(); if (playing) requestAnimationFrame(tick);
+}
+document.getElementById('approveAll').onclick = () => setStatus(zones.filter(z => z.status === 'proposed').map(z => z.id), 'approved');
+document.getElementById('resetAll').onclick = () => setStatus(zones.map(z => z.id), 'proposed');
+document.querySelectorAll('#setSeg button').forEach(b => b.onclick = () => { SET = b.dataset.set; loadZones(); });
+addEventListener('resize', drawRain);
+
+(async () => {
+  const cells = await j('/data/cells.json'); grid = cells.grid;
+  events = await j(`/data/events_${DATE}.json`);
+  fcNight = await j(`/data/forecast_${DATE}.json`);
+  fcLatest = await j(`/data/forecast_${DATE}_latest.json`).catch(() => null);
+  document.getElementById('datePill').textContent = `San Francisco · ${DATE}`;
+  document.getElementById('srcPill').textContent = `zones from ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source} forecast · ${fcNight.total_mm} mm`;
+  await loadZones();
+})();
+</script>
+</body>
+</html>
