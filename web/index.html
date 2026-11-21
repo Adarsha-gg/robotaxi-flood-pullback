@@ -3,359 +3,1255 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Flood Pull-Back</title>
+<title>Flood Pull-Back · SF Fleet Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-:root{--bg:#0b0d10;--panel:#13161b;--line:#242a33;--text:#e8eaed;--muted:#8a919c;
-  --amber:#ffb020;--red:#ff4d4f;--green:#2fd18b;--blue:#4da3ff;--gray:#59606b}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif;height:100vh;display:flex;flex-direction:column}
-header{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-h1{font-size:17px;margin:0}h1 b{color:var(--blue)}
-.pill{border:1px solid var(--line);border-radius:999px;padding:3px 10px;color:var(--muted);font-size:12px}
-.seg button{background:none;border:1px solid var(--line);color:var(--muted);padding:4px 10px;cursor:pointer}
-.seg button.on{color:var(--text);border-color:var(--blue)}
-.seg button:first-child{border-radius:6px 0 0 6px}.seg button:last-child{border-radius:0 6px 6px 0}
-main{flex:1;display:grid;grid-template-columns:1fr 360px;min-height:0}
-#map{height:100%;background:var(--bg)}
-aside{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:12px}
-.score{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
-.score div{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px}
-.score b{display:block;font-size:22px}.score span{color:var(--muted);font-size:11px}
-.zone{border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;cursor:pointer}
-.zone.sel{border-color:var(--blue)}
-.zone h3{margin:0 0 4px;font-size:13px;display:flex;justify-content:space-between;gap:6px}
-.zone p{margin:4px 0;color:var(--muted);font-size:12px}
-.zone .st{font-size:11px;padding:1px 6px;border-radius:4px}
-.st.proposed{background:#3a2c0a;color:var(--amber)}.st.approved{background:#3a1012;color:var(--red)}.st.rejected{background:#22262c;color:var(--gray)}
-.btns{display:flex;gap:6px;margin-top:6px}
-.btns button,.bar button{background:var(--bg);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:4px 10px;cursor:pointer}
-.btns button.ok{border-color:var(--red)}
-footer{border-top:1px solid var(--line);padding:8px 16px;display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
-.bar{display:flex;gap:10px;align-items:center}
-#clock{font:600 20px ui-monospace,Menlo,monospace;min-width:70px}
-#rain{width:100%;height:56px;display:block}
-#banner{position:absolute;top:70px;left:50%;transform:translateX(-50%);z-index:999;background:#3a1012;border:1px solid var(--red);color:#ffd7d8;padding:8px 14px;border-radius:8px;font-weight:600;display:none}
-.legend{display:flex;gap:12px;color:var(--muted);font-size:12px;flex-wrap:wrap}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:4px;vertical-align:middle}
-#dayScore{width:100%;border-collapse:collapse;font-size:12px}
-#dayScore td,#dayScore th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:right}
-#dayScore td:first-child,#dayScore th:first-child{text-align:left}
-#dayScore th{color:var(--muted);font-weight:500}
-h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px}
-@media (max-width:900px){main{grid-template-columns:1fr;grid-template-rows:55vh 1fr}}
+:root {
+  --bg: #07090d;
+  --surface: #0d1117;
+  --card: #131822;
+  --card-hover: #181f2c;
+  --glass: rgba(10, 14, 22, 0.80);
+  --glass-strong: rgba(10, 14, 22, 0.92);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f0f4f8;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.14);
+  --red: #f43f5e;
+  --red-soft: rgba(244, 63, 94, 0.15);
+  --green: #10b981;
+  --green-soft: rgba(16, 185, 129, 0.14);
+  --cyan: #38bdf8;
+  --cyan-soft: rgba(56, 189, 248, 0.14);
+  --indigo: #818cf8;
+  --gray: #64748b;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-hud: 0 12px 32px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.45 var(--font-sans); -webkit-font-smoothing: antialiased;
+  display: grid; grid-template-rows: 52px minmax(0, 1fr) 84px; overflow: hidden;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.12); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.22); }
+
+/* ---- Header Ops Bar ---- */
+.ops-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 16px; height: 52px; background: var(--surface);
+  border-bottom: 1px solid var(--border); z-index: 50;
+}
+.ops-left, .ops-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.brand-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.02em; }
+.brand-name b { color: var(--cyan); font-weight: 700; }
+.brand-tag {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-dim);
+  padding: 2px 6px; border-radius: 4px; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  box-shadow: 0 0 0 3px rgba(16,185,129,0.2), 0 0 10px var(--green);
+  animation: pulseDot 2.2s ease-in-out infinite;
+}
+@keyframes pulseDot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .55; transform: scale(.86); } }
+
+.seg {
+  display: inline-flex; padding: 2px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.seg button {
+  background: transparent; border: none; color: var(--text-dim);
+  padding: 5px 10px; border-radius: 6px; font: 500 12px/1 var(--font-sans);
+  cursor: pointer; transition: all .15s ease; white-space: nowrap;
+}
+.seg button:hover:not(:disabled) { color: var(--text); }
+.seg button.on {
+  background: #1b2434; color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(56,189,248,0.38), 0 1px 3px rgba(0,0,0,0.4);
+}
+.seg button:disabled { opacity: .35; cursor: not-allowed; }
+.seg button.live-pill-on {
+  background: rgba(16,185,129,0.18); color: #a7f3d0;
+  box-shadow: inset 0 0 0 1px rgba(16,185,129,0.45);
+}
+
+.meta-chip {
+  font-size: 11px; color: var(--text-dim); padding: 4px 10px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); white-space: nowrap;
+}
+.cam-cta {
+  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  color: #e0f2fe; background: linear-gradient(135deg, rgba(14,165,233,0.22), rgba(56,189,248,0.12));
+  border: 1px solid rgba(56,189,248,0.48);
+  box-shadow: 0 0 18px rgba(56,189,248,0.16); transition: all .15s ease; white-space: nowrap;
+}
+.cam-cta:hover { background: rgba(56,189,248,0.28); box-shadow: 0 0 24px rgba(56,189,248,0.32); transform: translateY(-0.5px); }
+.cta-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 8px var(--cyan); }
+
+/* ---- Main Split ---- */
+main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; position: relative; }
+#mapWrap { position: relative; width: 100%; height: 100%; min-height: 0; }
+#map { width: 100%; height: 100%; background: var(--bg); }
+
+/* ---- Floating Map Glass HUDs ---- */
+.hud {
+  position: absolute; z-index: 600;
+  background: var(--glass); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-hud);
+}
+.hud-telemetry { top: 14px; left: 14px; display: flex; align-items: center; gap: 14px; padding: 9px 14px; }
+.tel-item { display: flex; flex-direction: column; gap: 1px; }
+.tel-lbl { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase; }
+.tel-val { font-size: 16px; font-weight: 700; line-height: 1.15; color: var(--text); }
+.tel-div { width: 1px; height: 24px; background: var(--border); }
+.text-green { color: var(--green) !important; }
+.text-red { color: var(--red) !important; }
+.text-cyan { color: var(--cyan) !important; }
+.text-amber { color: var(--amber) !important; }
+.text-dim { color: var(--text-dim); }
+
+.hud-toast {
+  display: none; position: absolute; top: 14px; right: 14px; z-index: 650;
+  max-width: 440px; padding: 10px 14px; border-radius: var(--radius-md);
+  background: rgba(45, 12, 20, 0.92); backdrop-filter: blur(12px);
+  border: 1px solid rgba(244, 63, 94, 0.7); color: #ffe4e6;
+  font-size: 12.5px; font-weight: 600; box-shadow: 0 12px 32px rgba(244,63,94,0.28);
+  animation: toastIn .22s ease-out;
+}
+.hud-toast.cam-toast {
+  background: rgba(8, 30, 48, 0.94); border-color: rgba(56, 189, 248, 0.8);
+  color: #e0f2fe; box-shadow: 0 12px 32px rgba(56,189,248,0.3);
+}
+@keyframes toastIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+.hud-bottom-left {
+  bottom: 14px; left: 14px; display: flex; align-items: center; gap: 12px;
+  padding: 7px 12px; flex-wrap: wrap;
+}
+.map-legend { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
+.map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.swatch { display: inline-block; width: 12px; height: 8px; border-radius: 2px; }
+.sw-prop { background: rgba(245,158,11,0.25); border: 1.5px dashed var(--amber); }
+.sw-appr { background: rgba(244,63,94,0.35); border: 1.5px solid var(--red); box-shadow: 0 0 6px rgba(244,63,94,0.5); }
+.sw-cam  { background: rgba(56,189,248,0.3); border: 1.5px solid var(--cyan); box-shadow: 0 0 6px rgba(56,189,248,0.6); }
+.dot-sm  { display: inline-block; width: 7px; height: 7px; border-radius: 50%; }
+
+.waymo-pill {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  padding-left: 10px; border-left: 1px solid var(--border);
+  font-size: 11px; font-weight: 500; color: var(--text-dim); user-select: none;
+}
+.waymo-pill input { display: none; }
+.toggle-track {
+  width: 26px; height: 14px; border-radius: 99px; background: rgba(255,255,255,0.12);
+  position: relative; transition: background .15s; flex-shrink: 0;
+}
+.toggle-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px;
+  border-radius: 50%; background: #fff; transition: transform .15s;
+}
+.waymo-pill input:checked + .toggle-track { background: var(--cyan); }
+.waymo-pill input:checked + .toggle-track::after { transform: translateX(12px); }
+
+/* SVG Zone Glow & Camera Pulse */
+.zone-poly { transition: fill-opacity .2s, stroke-opacity .2s, stroke-width .2s; }
+.zone-poly-approved { filter: drop-shadow(0 0 7px rgba(244, 63, 94, 0.65)); }
+.zone-poly-proposed { filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.35)); }
+.zone-poly-cam {
+  filter: drop-shadow(0 0 9px rgba(56, 189, 248, 0.85));
+  animation: camPolyPulse 1.8s ease-in-out infinite;
+}
+.zone-poly-sel { filter: drop-shadow(0 0 11px rgba(255, 255, 255, 0.78)); }
+@keyframes camPolyPulse {
+  0%, 100% { stroke-opacity: 1; stroke-width: 2.8; }
+  50% { stroke-opacity: 0.45; stroke-width: 4.2; }
+}
+
+/* Zone Centroid Pill Labels */
+.zone-label-wrap { background: none; border: none; pointer-events: auto; }
+.zone-pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  transform: translate(-50%, -50%); white-space: nowrap;
+  padding: 2px 7px; border-radius: 999px; font: 600 10.5px/1.2 var(--font-sans);
+  background: rgba(9, 13, 20, 0.86); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,0.16); color: var(--text);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5); cursor: pointer; transition: transform .12s;
+}
+.zone-pill:hover { transform: translate(-50%, -50%) scale(1.05); border-color: rgba(255,255,255,0.4); }
+.zone-pill i { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.zone-pill.cam { border-color: rgba(56,189,248,0.75); color: #e0f2fe; background: rgba(8,28,44,0.92); }
+.zone-pill.dim { opacity: 0.42; }
+.zone-pill.sel { border-color: #fff; transform: translate(-50%, -50%) scale(1.07); }
+
+/* Dark Leaflet overrides */
+.leaflet-control-zoom { border: 1px solid var(--border-strong) !important; border-radius: 8px !important; overflow: hidden; box-shadow: var(--shadow-hud) !important; }
+.leaflet-control-zoom a { background: var(--glass-strong) !important; color: var(--text) !important; border-color: var(--border) !important; }
+.leaflet-control-zoom a:hover { background: #1e293b !important; }
+.leaflet-control-attribution { background: rgba(7,9,13,0.65) !important; color: var(--text-muted) !important; font-size: 10px !important; }
+.leaflet-control-attribution a { color: var(--text-dim) !important; }
+.leaflet-tooltip {
+  background: var(--glass-strong) !important; color: var(--text) !important;
+  border: 1px solid var(--border-strong) !important; border-radius: 7px !important;
+  box-shadow: var(--shadow-hud) !important; font: 11.5px/1.35 var(--font-sans) !important; padding: 6px 9px !important;
+}
+
+/* ---- Right Ops Panel ---- */
+.ops-panel {
+  background: var(--surface); border-left: 1px solid var(--border);
+  overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+.panel-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 11px 12px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; gap: 8px; }
+.card-title { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.badge-carbon {
+  font: 600 9.5px/1 var(--font-mono); padding: 3px 7px; border-radius: 99px;
+  background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(56,189,248,0.32);
+}
+
+/* KPI Comparison Bars */
+.kpi-model { padding: 8px 9px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid var(--border); margin-bottom: 7px; }
+.kpi-model:last-child { margin-bottom: 0; }
+.kpi-model.highlight { border-color: rgba(56,189,248,0.38); background: rgba(56,189,248,0.05); }
+.kpi-model-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 12px; font-weight: 600; gap: 6px; }
+.kpi-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi-bar-row { display: flex; flex-direction: column; gap: 3px; }
+.kpi-bar-top { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-dim); }
+.kpi-bar-top b { color: var(--text); font-family: var(--font-mono); }
+.track { height: 5px; border-radius: 99px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.fill { height: 100%; border-radius: 99px; transition: width .35s ease; }
+
+/* Trip Rerouter */
+.preset-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.pill-btn {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 5px 9px; border-radius: 999px; font: 500 11.5px/1.1 var(--font-sans);
+  cursor: pointer; transition: all .15s;
+}
+.pill-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.pill-btn.on { color: var(--text); border-color: var(--cyan); background: var(--cyan-soft); }
+.trip-result {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; font-size: 12px;
+}
+.trip-badge-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.trip-blocks { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-weight: 700; font-size: 12.5px; }
+.trip-delta { font: 600 11px/1 var(--font-mono); padding: 3px 7px; border-radius: 6px; background: var(--green-soft); color: var(--green); }
+.trip-sub { margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+
+/* Sticky Zone Queue */
+.queue-wrap { display: flex; flex-direction: column; gap: 8px; }
+.queue-sticky {
+  position: sticky; top: -12px; z-index: 10;
+  background: var(--surface); padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.queue-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.bulk-btns { display: flex; gap: 6px; }
+.btn-xs {
+  background: var(--card); border: 1px solid var(--border-strong); color: var(--text);
+  padding: 4px 9px; border-radius: 6px; font: 500 11px/1.2 var(--font-sans); cursor: pointer; transition: all .12s;
+}
+.btn-xs:hover { background: var(--card-hover); }
+.btn-danger { border-color: rgba(244,63,94,0.52); color: #fecdd3; background: var(--red-soft); }
+.btn-danger:hover { background: rgba(244,63,94,0.26); }
+
+.filter-pills { display: flex; gap: 5px; }
+.filter-pills button {
+  flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 5px 4px; border-radius: 7px; font: 500 11px/1 var(--font-sans); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; transition: all .12s;
+}
+.filter-pills button:hover { color: var(--text); }
+.filter-pills button.on { background: #1a2332; color: var(--text); border-color: rgba(56,189,248,0.48); }
+.filter-pills .cnt { font-family: var(--font-mono); font-size: 10px; opacity: .75; }
+
+/* Sleek Zone Cards */
+.zone-list { display: flex; flex-direction: column; gap: 8px; }
+.zone {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 11px; cursor: pointer; transition: border-color .15s, background .15s;
+}
+.zone:hover { background: var(--card-hover); border-color: var(--border-strong); }
+.zone.sel { border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(56,189,248,0.3); }
+.zone.is-cam { border-color: rgba(56,189,248,0.48); background: linear-gradient(180deg, rgba(56,189,248,0.09), var(--card) 55%); }
+.z-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.z-title { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.25; }
+.z-badges { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.st { font: 600 9.5px/1 var(--font-mono); text-transform: uppercase; padding: 3px 6px; border-radius: 5px; }
+.st.proposed { background: var(--amber-soft); color: var(--amber); }
+.st.approved { background: var(--red-soft); color: var(--red); }
+.st.rejected { background: rgba(100,116,139,0.16); color: var(--gray); }
+.st-cam {
+  font: 700 9.5px/1 var(--font-mono); padding: 3px 6px; border-radius: 5px;
+  background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(56,189,248,0.52);
+  animation: pulseDot 1.8s ease-in-out infinite;
+}
+.z-prob { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.z-prob .track { flex: 1; height: 4px; }
+.z-prob .mono { font-size: 11px; font-weight: 600; min-width: 34px; text-align: right; }
+.z-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 6px; }
+.chip {
+  font: 500 10.5px/1.2 var(--font-mono); padding: 2px 6px; border-radius: 5px;
+  background: rgba(255,255,255,0.04); border: 1px solid var(--border); color: var(--text-dim);
+}
+.z-reason {
+  margin: 0 0 8px; font-size: 11.5px; color: var(--text-dim);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.zone.sel .z-reason { -webkit-line-clamp: unset; color: #cbd5e1; }
+.btns { display: flex; gap: 6px; }
+.btns button {
+  flex: 0 0 auto; background: var(--bg); border: 1px solid var(--border-strong); color: var(--text);
+  border-radius: 6px; padding: 5px 9px; font: 500 11.5px/1 var(--font-sans); cursor: pointer; transition: all .12s;
+}
+.btns button:hover { background: var(--card-hover); }
+.btns button.ok { border-color: rgba(244,63,94,0.55); background: var(--red-soft); color: #ffe4e6; }
+.btns button.ok:hover { background: rgba(244,63,94,0.28); }
+.btns button.btn-genie {
+  margin-left: auto;
+  background: linear-gradient(135deg, rgba(56,189,248,0.18), rgba(129,140,248,0.18));
+  border-color: rgba(56,189,248,0.55); color: #e0f2fe; font-weight: 600;
+}
+.btns button.btn-genie:hover { background: linear-gradient(135deg, rgba(56,189,248,0.32), rgba(129,140,248,0.32)); }
+
+/* ---- Studio Replay Deck Footer ---- */
+.studio-deck {
+  height: 84px; background: var(--surface); border-top: 1px solid var(--border);
+  padding: 0 16px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center;
+}
+.deck-left { display: flex; align-items: center; gap: 12px; }
+.play-btn {
+  width: 40px; height: 40px; border-radius: 50%; border: 1px solid rgba(56,189,248,0.55);
+  background: linear-gradient(135deg, rgba(56,189,248,0.24), rgba(56,189,248,0.08));
+  color: var(--text); font-size: 14px; cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 0 16px rgba(56,189,248,0.18); transition: transform .12s, background .15s;
+}
+.play-btn:hover { transform: scale(1.05); background: rgba(56,189,248,0.32); }
+.clock-block { min-width: 78px; }
+#clock { font-size: 22px; font-weight: 700; line-height: 1.05; letter-spacing: -0.02em; }
+.clock-sub { font-size: 9.5px; color: var(--text-muted); letter-spacing: 0.06em; margin-top: 2px; }
+.chapters { display: flex; gap: 5px; flex-wrap: wrap; }
+.chapters button {
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-dim);
+  padding: 5px 8px; border-radius: 999px; font: 500 11px/1 var(--font-sans); cursor: pointer; transition: all .12s;
+}
+.chapters button:hover, .chapters button.on { color: var(--text); border-color: var(--cyan); background: var(--cyan-soft); }
+.deck-chart { position: relative; display: flex; flex-direction: column; gap: 3px; }
+#rain { width: 100%; height: 52px; display: block; cursor: ew-resize; touch-action: none; }
+.deck-legend { display: flex; align-items: center; gap: 12px; font-size: 10.5px; color: var(--text-muted); }
+.deck-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.rain-tip {
+  display: none; position: absolute; top: -26px; transform: translateX(-50%); pointer-events: none;
+  background: var(--glass-strong); border: 1px solid var(--border-strong); border-radius: 6px;
+  padding: 3px 7px; font-size: 10.5px; color: var(--text); white-space: nowrap; z-index: 20;
+}
+
+/* ---- Genie 4 Theater Modal ---- */
+.genie-backdrop {
+  position: fixed; inset: 0; z-index: 2000;
+  background: rgba(4, 6, 10, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  display: grid; place-items: center; padding: 20px; overflow: auto;
+}
+.genie-modal {
+  width: min(1380px, 100%); background: var(--surface);
+  border: 1px solid var(--border-strong); border-radius: 16px;
+  padding: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.75);
+}
+.genie-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.genie-title-wrap { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.genie-live-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 99px;
+  font: 700 10.5px/1 var(--font-mono); letter-spacing: 0.05em;
+  background: var(--red-soft); color: #fda4af; border: 1px solid rgba(244,63,94,0.55);
+}
+.genie-live-badge i { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulseDot 1.1s infinite; }
+.genie-zone { font-size: 16px; letter-spacing: -0.01em; }
+.genie-stat { font-size: 11.5px; color: var(--text-dim); padding: 4px 8px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); }
+.genie-actions { display: flex; gap: 8px; }
+.genie-grid { display: grid; grid-template-columns: 1fr 1.9fr; gap: 14px; }
+.genie-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+.genie-card-live { border-color: rgba(56,189,248,0.45); box-shadow: 0 0 32px rgba(56,189,248,0.12); }
+.genie-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); }
+.genie-frame { position: relative; background: #000; flex: 1; display: grid; place-items: center; }
+.genie-frame img { width: 100%; height: 100%; object-fit: cover; display: block; aspect-ratio: 16/9; }
+.wasd-hud {
+  position: absolute; bottom: 14px; left: 14px; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 8px; border-radius: 10px; background: rgba(7, 9, 13, 0.74); backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.wasd-row { display: flex; gap: 5px; }
+.keycap {
+  width: 34px; height: 34px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.08); color: var(--text); font: 700 12px/1 var(--font-mono);
+  cursor: pointer; user-select: none; transition: all .08s ease;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.6);
+}
+.keycap.active, .keycap:active {
+  background: var(--cyan); color: #04131e; border-color: #7dd3fc;
+  transform: translateY(1px); box-shadow: 0 0 14px rgba(56,189,248,0.75);
+}
+.genie-foot { margin-top: 10px; text-align: center; font-size: 11px; color: var(--text-muted); }
+
+@media (max-width: 1120px) { .chapters { display: none; } .meta-chip { display: none; } }
+@media (max-width: 980px) {
+  body { height: auto; overflow: auto; grid-template-rows: auto auto auto; }
+  main { grid-template-columns: 1fr; }
+  #mapWrap { height: 58vh; }
+  .genie-grid { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>Flood <b>Pull-Back</b></h1>
-  <span class="pill" id="datePill">San Francisco · 2026-11-18</span>
-  <span class="pill" id="srcPill">forecast: night before</span>
-  <a class="pill" id="modeLink" href="#" style="text-decoration:none;color:var(--text);border-color:var(--blue)">…</a>
-  <label class="pill" style="cursor:pointer"><input type="checkbox" id="waymoTog" checked> Waymo activity (CPUC 2026 Q3)</label>
-  <div class="seg" id="setSeg"><button data-set="carbon">Gemini 4 Carbon</button><button data-set="baseline">Baseline</button></div>
-  <div class="legend">
-    <span><span class="dot" style="background:var(--amber)"></span>proposed</span>
-    <span><span class="dot" style="background:var(--red)"></span>approved (cars avoid)</span>
-    <span><span class="dot" style="background:var(--green)"></span>flood caught</span>
-    <span><span class="dot" style="background:#fff"></span>flood missed</span>
+
+<header class="ops-bar">
+  <div class="ops-left">
+    <div class="brand">
+      <span class="live-dot"></span>
+      <span class="brand-name">Flood <b>Pull-Back</b></span>
+      <span class="brand-tag mono">SF OPS</span>
+    </div>
+    <div class="seg" id="modeSeg" role="group" aria-label="Operating Mode">
+      <button data-date="2026-11-18" class="on">Replay · Nov 18</button>
+      <button data-date="2026-11-25" id="liveModeBtn">Live · Nov 25</button>
+    </div>
+    <div class="seg" id="setSeg" role="group" aria-label="Zone Model">
+      <button data-set="carbon" class="on">Gemini 4 Carbon</button>
+      <button data-set="baseline" id="baseSetBtn">Baseline</button>
+    </div>
+  </div>
+  <div class="ops-right">
+    <span class="meta-chip mono" id="srcPill">59.3 mm · night-before</span>
+    <a class="cam-cta" href="/cam" target="_blank" rel="noopener">
+      <span class="cta-dot"></span>Fleet Camera <span class="mono">/cam ↗</span>
+    </a>
   </div>
 </header>
-<div id="genie" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(5,7,10,.92);padding:18px;overflow:auto">
-  <div style="max-width:1400px;margin:0 auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <div><b style="font-size:16px">Genie 4 · <span id="gZone"></span></b>
-        <div id="gStatus" style="color:var(--muted);font-size:12px">starting…</div></div>
-      <div class="bar"><button id="gSave">Stop &amp; save MP4</button><button id="gClose">Close</button></div>
+
+<main>
+  <div id="mapWrap">
+    <div id="map"></div>
+
+    <div class="hud hud-telemetry" id="telemetryHud">
+      <div class="tel-item">
+        <span class="tel-lbl">STORM CLOCK</span>
+        <b class="tel-val mono" id="hudClock">06:00</b>
+      </div>
+      <div class="tel-div"></div>
+      <div class="tel-item">
+        <span class="tel-lbl" id="lblFloods">FLOODS SO FAR</span>
+        <b class="tel-val mono" id="sN">0</b>
+      </div>
+      <div class="tel-div"></div>
+      <div class="tel-item">
+        <span class="tel-lbl">CAUGHT</span>
+        <b class="tel-val mono text-green" id="sPct">–</b>
+      </div>
+      <div class="tel-div"></div>
+      <div class="tel-item">
+        <span class="tel-lbl">ACTIVE ZONES</span>
+        <b class="tel-val mono text-red" id="sActive">0</b>
+      </div>
+      <span id="sIn" style="display:none">0</span>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 2.2fr;gap:14px;margin-top:12px">
-      <div><div style="color:var(--muted);font-size:12px;margin-bottom:6px">REAL 311 photo from a resident · <span id="gWhen"></span></div>
-        <img id="gPhoto" style="width:100%;border-radius:8px;border:1px solid var(--line)"></div>
-      <div><div style="color:var(--muted);font-size:12px;margin-bottom:6px">GENERATED live by Genie 4 from that photo · drive with W A S D / arrows · illustration, not a measurement</div>
-        <img id="gLive" style="width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;border:1px solid var(--blue)"></div>
+
+    <div id="banner" class="hud-toast"></div>
+
+    <div class="hud hud-bottom-left">
+      <div class="map-legend">
+        <span><i class="swatch sw-prop"></i>Proposed</span>
+        <span><i class="swatch sw-appr"></i>Approved</span>
+        <span><i class="swatch sw-cam"></i>Car Cam</span>
+        <span><i class="dot-sm" style="background:var(--green)"></i>Caught</span>
+        <span><i class="dot-sm" style="background:#f8fafc"></i>Missed</span>
+      </div>
+      <label class="waymo-pill" id="waymoPill">
+        <input type="checkbox" id="waymoTog" checked>
+        <span class="toggle-track"></span>
+        <span>Waymo CPUC Q3 Activity</span>
+      </label>
+    </div>
+  </div>
+
+  <aside class="ops-panel">
+    <section class="panel-card" id="kpiCard">
+      <div class="card-head">
+        <span class="card-title">Model Performance · Full Day</span>
+        <span class="badge-carbon" id="kpiScope">CARBON VS BASELINE</span>
+      </div>
+      <div id="kpiBars"></div>
+    </section>
+
+    <section class="panel-card" id="tripCard">
+      <div class="card-head">
+        <span class="card-title">Robotaxi Trip Rerouter</span>
+        <span class="mono text-dim" style="font-size:11px" id="tripClockTag">@ 06:00</span>
+      </div>
+      <div class="preset-pills">
+        <button class="pill-btn on" data-preset="stanyan">Stanyan &amp; Fell → Moscone</button>
+        <button class="pill-btn" data-preset="noe">Noe → Moscone</button>
+        <button class="pill-btn" id="pickBtn">⌖ Pick on map</button>
+      </div>
+      <div id="tripInfo" class="trip-result">
+        <span class="text-dim">Click a route preset to compare normal (red) vs flood-aware (green) Valhalla routing.</span>
+      </div>
+    </section>
+
+    <section class="queue-wrap">
+      <div class="queue-sticky">
+        <div class="queue-top">
+          <span class="card-title" id="zoneHead">Zones</span>
+          <div class="bulk-btns">
+            <button id="approveAll" class="btn-xs btn-danger">Approve All</button>
+            <button id="resetAll" class="btn-xs">Reset</button>
+          </div>
+        </div>
+        <div class="filter-pills" id="zoneFilters">
+          <button data-f="all" class="on">All <span class="cnt" id="cntAll">0</span></button>
+          <button data-f="proposed">Proposed <span class="cnt" id="cntProp">0</span></button>
+          <button data-f="approved">Approved <span class="cnt" id="cntAppr">0</span></button>
+          <button data-f="camera">Camera <span class="cnt" id="cntCam">0</span></button>
+        </div>
+      </div>
+      <div id="zones" class="zone-list"></div>
+    </section>
+  </aside>
+</main>
+
+<footer class="studio-deck">
+  <div class="deck-left">
+    <button id="play" class="play-btn" aria-label="Play or pause timeline">▶</button>
+    <div class="clock-block">
+      <div id="clock" class="mono">06:00</div>
+      <div class="clock-sub mono" id="clockDate">NOV 18 · PST</div>
+    </div>
+    <div class="chapters" id="chapters">
+      <button data-min="360">06:00 Pre-dawn</button>
+      <button data-min="540">09:00 Cloudburst</button>
+      <button data-min="600">10:00 Peak</button>
+      <button data-min="660">11:00 Waymo Pause</button>
+    </div>
+  </div>
+  <div class="deck-chart">
+    <div id="rainTip" class="rain-tip mono"></div>
+    <canvas id="rain"></canvas>
+    <div class="deck-legend">
+      <span><i class="dot-sm" style="background:var(--amber)"></i>Night-before forecast (zone input)</span>
+      <span><i class="dot-sm" style="background:var(--cyan)"></i>Latest forecast</span>
+      <span class="mono" style="margin-left:auto;opacity:.75">Click or drag chart to scrub</span>
+    </div>
+  </div>
+</footer>
+
+<div id="genie" class="genie-backdrop" style="display:none" role="dialog" aria-modal="true">
+  <div class="genie-modal">
+    <div class="genie-bar">
+      <div class="genie-title-wrap">
+        <span class="genie-live-badge" id="gBadge"><i></i><span id="gBadgeTxt">GENIE 4 · STARTING</span></span>
+        <b class="genie-zone" id="gZone">–</b>
+        <span class="genie-stat mono" id="gStatus">starting…</span>
+      </div>
+      <div class="genie-actions">
+        <button id="gSave" class="btn-xs">⬇ Stop &amp; Save MP4</button>
+        <button id="gClose" class="btn-xs btn-danger">✕ Close <span class="mono" style="opacity:.65">ESC</span></button>
+      </div>
+    </div>
+    <div class="genie-grid">
+      <div class="genie-card">
+        <div class="genie-card-head">
+          <span>REAL SF 311 Photo</span>
+          <span class="mono text-dim" id="gWhen">–</span>
+        </div>
+        <div class="genie-frame"><img id="gPhoto" alt="SF 311 flood photo"></div>
+      </div>
+      <div class="genie-card genie-card-live">
+        <div class="genie-card-head">
+          <span>LIVE Genie 4 World <span class="text-cyan">(Steerable · 720p 24fps)</span></span>
+          <span class="mono text-dim">W A S D / Arrows</span>
+        </div>
+        <div class="genie-frame">
+          <img id="gLive" alt="Live Genie 4 stream">
+          <div class="wasd-hud" aria-label="Driving controls">
+            <div class="wasd-row"><button class="keycap" data-k="key_w">W</button></div>
+            <div class="wasd-row">
+              <button class="keycap" data-k="key_a">A</button>
+              <button class="keycap" data-k="key_s">S</button>
+              <button class="keycap" data-k="key_d">D</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="genie-foot">
+      Visual illustration generated live from a real San Francisco 311 resident photo — not a physical depth measurement.
     </div>
   </div>
 </div>
-<div id="banner">11:00 AM · Waymo paused all San Francisco service</div>
-<main>
-  <div id="map"></div>
-  <aside>
-    <div class="score">
-      <div><b id="sN">0</b><span>real floods so far</span></div>
-      <div><b id="sIn">0</b><span>inside approved zones</span></div>
-      <div><b id="sPct">–</b><span>caught</span></div>
-    </div>
-    <h2>Full-day score vs real floods</h2>
-    <table id="dayScore"></table>
-    <div class="bar" style="margin-top:10px"><button id="approveAll">Approve all proposed</button><button id="resetAll">Reset</button></div>
-    <h2>Robotaxi trip at the current clock</h2>
-    <div class="bar"><button id="tripBtn">Route demo trip</button><button id="pickBtn">Pick on map</button></div>
-    <p id="tripInfo" style="color:var(--muted);font-size:12px;margin:6px 0 0">Noe Valley → Moscone Center. Red = normal route, green = flood-aware route.</p>
-    <h2 id="zoneHead">Zones</h2>
-    <div id="zones"></div>
-  </aside>
-</main>
-<footer>
-  <div class="bar"><button id="play">▶ Play</button><span id="clock">06:00</span></div>
-  <div><canvas id="rain"></canvas>
-    <div class="legend"><span><span class="dot" style="background:var(--amber)"></span>night-before forecast (what zones used)</span><span><span class="dot" style="background:var(--blue)"></span>latest forecast</span><span>scrub: click the chart</span></div>
-  </div>
-</footer>
+
 <script>
-const DATE = new URLSearchParams(location.search).get('date') || '2026-11-18';
-const T0 = 6*60, T1 = 14*60, PLAY_MS = 40000;
+let DATE = new URLSearchParams(location.search).get('date') || '2026-11-18';
 let SET = new URLSearchParams(location.search).get('set') || 'carbon';
-let zones = [], events = [], fcNight = null, fcLatest = null, grid = null;
-let clock = T0, playing = false, last = 0, selected = null;
-const map = L.map('map', {zoomControl: true, preferCanvas: true}).setView([37.765, -122.435], 13);
+const T0 = 6 * 60, T1 = 14 * 60, PLAY_MS = 40000;
+let zones = [], events = [], fcNight = null, fcLatest = null, grid = null, liveMeta = null;
+let clock = T0, playing = false, last = 0, lastRenderedMin = -1, selected = null, zoneFilter = 'all';
+let camToastTimer = null, camToastActive = false;
+
+const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([37.768, -122.428], 13);
+L.control.zoom({ position: 'bottomright' }).addTo(map);
 const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
-L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {attribution: 'Tiles © Esri · 311 data: DataSF', maxZoom: 16}).addTo(map);
-L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16}).addTo(map);
-const zoneLayer = L.layerGroup().addTo(map), evLayer = L.layerGroup().addTo(map);
+L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri · 311: DataSF · CPUC/NHTSA', maxZoom: 16 }).addTo(map);
+L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16 }).addTo(map);
+
+const polyRenderer = L.svg({ padding: 0.5 });
+const zoneCellLayer = L.layerGroup().addTo(map);
+const zonePolyLayer = L.layerGroup().addTo(map);
+const zoneLabelLayer = L.layerGroup().addTo(map);
+const evLayer = L.layerGroup().addTo(map);
+const tripLayer = L.layerGroup().addTo(map);
+
 const tmin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16);
-const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-async function j(url, opt) { const r = await fetch(url, opt); if (!r.ok) throw new Error(url); return r.json(); }
-
-async function loadZones() {
-  const z = await j(`/api/zones?date=${DATE}&set=${SET}`);
-  SET = z.set; zones = z.zones;
-  document.querySelectorAll('#setSeg button').forEach(b => b.classList.toggle('on', b.dataset.set === SET));
-  document.getElementById('zoneHead').textContent = `Zones · ${z.generated_by} · ${zones.length}`;
-  drawZones(); renderList(); update();
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  if (!r.ok) throw new Error(`${url} (${r.status})`);
+  return r.json();
 }
+const post = (u, b) => j(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) });
 
 function cellBounds(cid) {
   const [r, c] = cid.slice(1).split('_c').map(Number);
   const la = grid.lat0 + r * grid.dlat, lo = grid.lon0 + c * grid.dlon;
   return [[la, lo], [la + grid.dlat, lo + grid.dlon]];
 }
+function zoneCentroid(z) {
+  if (z._poly) return z._poly.getBounds().getCenter();
+  let la = 0, lo = 0;
+  for (const cid of z.cells || []) {
+    const [r, c] = cid.slice(1).split('_c').map(Number);
+    la += grid.lat0 + (r + 0.5) * grid.dlat;
+    lo += grid.lon0 + (c + 0.5) * grid.dlon;
+  }
+  const n = Math.max(1, (z.cells || []).length);
+  return L.latLng(la / n, lo / n);
+}
+function shortLabel(name) {
+  return String(name || '').replace(/\s+(Corridor|Basin|Industrial Basin)$/i, '').slice(0, 24);
+}
+function active(z) { return clock >= tmin(z.start) && clock <= tmin(z.end); }
+
+async function loadZones() {
+  const z = await j(`/api/zones?date=${DATE}&set=${SET}`);
+  SET = z.set;
+  zones = z.zones || [];
+  document.querySelectorAll('#setSeg button').forEach(b => b.classList.toggle('on', b.dataset.set === SET));
+  document.getElementById('zoneHead').textContent = `Zones · ${z.generated_by} · ${zones.length}`;
+  drawZones();
+  renderList();
+  update(true);
+}
 
 function drawZones() {
-  zoneLayer.clearLayers();
+  zoneCellLayer.clearLayers();
+  zonePolyLayer.clearLayers();
+  zoneLabelLayer.clearLayers();
+  const showAllLabels = zones.length <= 24;
   for (const z of zones) {
-    z._rects = z.cells.map(cid => L.rectangle(cellBounds(cid), {weight: 1}).on('click', () => select(z.id)).addTo(zoneLayer));
+    z._rects = (z.cells || []).map(cid =>
+      L.rectangle(cellBounds(cid), { weight: 0, stroke: false, interactive: true })
+        .on('click', () => { if (!picking) select(z.id); })
+        .addTo(zoneCellLayer)
+    );
+    if (Array.isArray(z.polygon) && z.polygon.length >= 3) {
+      const latlngs = z.polygon.map(([lo, la]) => [la, lo]);
+      z._poly = L.polygon(latlngs, { renderer: polyRenderer, weight: 2, fillOpacity: 0.04, interactive: true })
+        .on('click', () => { if (!picking) select(z.id); })
+        .addTo(zonePolyLayer);
+    } else {
+      z._poly = null;
+    }
+    if (showAllLabels || z.source === 'camera' || z.id === selected) {
+      z._label = L.marker(zoneCentroid(z), {
+        icon: L.divIcon({ className: 'zone-label-wrap', html: '', iconSize: [0, 0] }),
+        interactive: true
+      }).on('click', () => { if (!picking) select(z.id); }).addTo(zoneLabelLayer);
+    } else {
+      z._label = null;
+    }
   }
   styleZones();
 }
 
-function active(z) { return clock >= tmin(z.start) && clock <= tmin(z.end); }
-
 function styleZones() {
+  let activeCount = 0;
   for (const z of zones) {
-    const col = z.status === 'approved' ? '#ff4d4f' : z.status === 'rejected' ? '#59606b' : '#ffb020';
-    const on = active(z) && z.status !== 'rejected';
-    for (const r of z._rects || []) r.setStyle({color: col, fillColor: col, weight: z.id === selected ? 2.5 : 1,
-      opacity: on ? 0.9 : 0.35, fillOpacity: on ? (z.status === 'approved' ? 0.45 : 0.22) : 0.06,
-      dashArray: z.status === 'proposed' ? '3 3' : null});
+    const isCam = z.source === 'camera';
+    const isRej = z.status === 'rejected';
+    const isAppr = z.status === 'approved';
+    const on = active(z) && !isRej;
+    if (on && isAppr) activeCount++;
+
+    const col = isRej ? '#64748b' : isCam ? '#38bdf8' : isAppr ? '#f43f5e' : '#f59e0b';
+    const isSel = z.id === selected;
+    const cellFill = !on ? 0.04 : isCam ? 0.28 : isAppr ? 0.27 : 0.14;
+    for (const r of z._rects || []) {
+      r.setStyle({ fillColor: col, fillOpacity: isSel ? Math.min(cellFill + 0.14, 0.48) : cellFill });
+    }
+    if (z._poly) {
+      z._poly.setStyle({
+        color: isSel ? '#ffffff' : col,
+        fillColor: col,
+        weight: isSel ? 3 : isCam ? 2.6 : isAppr ? 2.2 : 1.7,
+        opacity: isRej ? 0.25 : on ? 0.95 : 0.35,
+        fillOpacity: on ? 0.06 : 0.01,
+        dashArray: z.status === 'proposed' ? '6 5' : null
+      });
+      const pathEl = z._poly.getElement();
+      if (pathEl) {
+        pathEl.classList.toggle('zone-poly', true);
+        pathEl.classList.toggle('zone-poly-approved', isAppr && !isCam && on);
+        pathEl.classList.toggle('zone-poly-proposed', z.status === 'proposed' && !isCam && on);
+        pathEl.classList.toggle('zone-poly-cam', isCam && !isRej);
+        pathEl.classList.toggle('zone-poly-sel', isSel);
+      }
+    }
+    if (z._label) {
+      const el = z._label.getElement();
+      if (el) {
+        const cls = `zone-pill${isCam ? ' cam' : ''}${!on ? ' dim' : ''}${isSel ? ' sel' : ''}`;
+        el.innerHTML = `<div class="${cls}"><i style="background:${col}"></i>${isCam ? 'CAM · ' : ''}${esc(shortLabel(z.name))}</div>`;
+      }
+    }
   }
+  document.getElementById('sActive').textContent = activeCount;
 }
 
 function renderList() {
+  const counts = {
+    all: zones.length,
+    proposed: zones.filter(z => z.status === 'proposed').length,
+    approved: zones.filter(z => z.status === 'approved').length,
+    camera: zones.filter(z => z.source === 'camera').length
+  };
+  document.getElementById('cntAll').textContent = counts.all;
+  document.getElementById('cntProp').textContent = counts.proposed;
+  document.getElementById('cntAppr').textContent = counts.approved;
+  document.getElementById('cntCam').textContent = counts.camera;
+
+  const sorted = [...zones].sort((a, b) => (b.source === 'camera') - (a.source === 'camera'));
+  const filtered = sorted.filter(z =>
+    zoneFilter === 'all' ? true : zoneFilter === 'camera' ? z.source === 'camera' : z.status === zoneFilter
+  );
   const el = document.getElementById('zones');
-  el.innerHTML = zones.slice(0, 40).map(z => `
-    <div class="zone ${z.id === selected ? 'sel' : ''}" data-id="${z.id}">
-      <h3><span>${esc(z.name)}</span><span class="st ${z.status}">${z.status}</span></h3>
-      <p>${z.start.slice(11, 16)}–${z.end.slice(11, 16)} · ${z.cells.length} cells · p=${z.p_flood}${z.source === 'camera' ? ' · from a car camera' : ''}</p>
-      <p>${esc(z.reason)}</p>
-      <div class="btns"><button class="ok" data-a="approved">Approve</button><button data-a="rejected">Reject</button><button data-g="1" style="border-color:var(--blue)">Drive it in Genie 4</button></div>
-    </div>`).join('');
-  el.querySelectorAll('.zone').forEach(d => {
-    d.addEventListener('click', e => {
-      const a = e.target.dataset.a;
-      if (e.target.dataset.g) { e.stopPropagation(); openGenie(d.dataset.id); return; }
-      if (a) { e.stopPropagation(); setStatus([d.dataset.id], a); } else select(d.dataset.id);
-    });
-  });
+  if (!filtered.length) {
+    el.innerHTML = `<div style="padding:18px;text-align:center;color:var(--text-muted);font-size:12px">No ${zoneFilter} zones.</div>`;
+    return;
+  }
+  el.innerHTML = filtered.slice(0, 50).map(z => {
+    const isCam = z.source === 'camera';
+    const pct = Math.round((z.p_flood || 0) * 100);
+    const barCol = isCam ? 'var(--cyan)' : pct >= 70 ? 'var(--red)' : 'var(--amber)';
+    const ev = z.evidence;
+    const evText = ev?.n_reports ? `${ev.n_reports.toLocaleString()} reports${ev.storm_days?.[0] ? ' · ' + ev.storm_days[0] : ''}` : null;
+    return `<div class="zone ${z.id === selected ? 'sel' : ''} ${isCam ? 'is-cam' : ''}" data-id="${z.id}">
+      <div class="z-head">
+        <div class="z-title">${esc(z.name)}</div>
+        <div class="z-badges">
+          ${isCam ? `<span class="st-cam">CAR CAM${z.car_id ? ' · ' + esc(z.car_id) : ''}</span>` : ''}
+          <span class="st ${z.status}">${z.status}</span>
+        </div>
+      </div>
+      <div class="z-prob">
+        <div class="track"><div class="fill" style="width:${pct}%;background:${barCol}"></div></div>
+        <span class="mono" style="color:${barCol}">${pct}%</span>
+      </div>
+      <div class="z-chips">
+        <span class="chip">${z.start.slice(11, 16)}–${z.end.slice(11, 16)}</span>
+        <span class="chip">${(z.cells || []).length} cells</span>
+        ${evText ? `<span class="chip">${esc(evText)}</span>` : ''}
+      </div>
+      <p class="z-reason">${esc(z.fleet_notice || z.reason)}</p>
+      <div class="btns">
+        <button class="ok" data-a="approved">Approve</button>
+        <button data-a="rejected">Reject</button>
+        <button class="btn-genie" data-g="1">▶ Drive in Genie 4</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
-function select(id) {
-  selected = id; styleZones(); renderList();
-  const z = zones.find(z => z.id === id);
-  if (z) map.fitBounds(L.featureGroup(z._rects).getBounds(), {maxZoom: 15, padding: [60, 60]});
-  document.querySelector(`.zone[data-id="${id}"]`)?.scrollIntoView({block: 'nearest'});
+document.getElementById('zones').addEventListener('click', e => {
+  const card = e.target.closest('.zone');
+  if (!card) return;
+  const id = card.dataset.id;
+  if (e.target.closest('[data-g]')) { e.stopPropagation(); openGenie(id); return; }
+  const actBtn = e.target.closest('[data-a]');
+  if (actBtn) { e.stopPropagation(); setStatus([id], actBtn.dataset.a); return; }
+  select(id);
+});
+
+function select(id, opts = {}) {
+  selected = id;
+  if (zones.length > 24) drawZones(); else styleZones();
+  renderList();
+  const z = zones.find(x => x.id === id);
+  if (z && !opts.noZoom) {
+    const b = z._poly ? z._poly.getBounds() : (z._rects?.length ? L.featureGroup(z._rects).getBounds() : null);
+    if (b && b.isValid()) map.fitBounds(b, { maxZoom: opts.maxZoom ?? 14, padding: [60, 60] });
+  }
+  document.querySelector(`.zone[data-id="${id}"]`)?.scrollIntoView({ block: 'nearest' });
 }
 
 async function setStatus(ids, status) {
-  await j('/api/zones/approve', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date: DATE, set: SET, zone_ids: ids, status})});
+  if (!ids.length) return;
+  await post('/api/zones/approve', { date: DATE, set: SET, zone_ids: ids, status });
   for (const z of zones) if (ids.includes(z.id)) z.status = status;
   styleZones(); renderList(); update(true); loadScore();
+  if (tripLayer.getLayers().length) routeTrip();
 }
 
 async function loadScore() {
-  const rows = [];
+  const el = document.getElementById('kpiBars');
+  const results = [];
   for (const s of ['carbon', 'baseline']) {
     const r = await j(`/api/score?date=${DATE}&set=${s}`).catch(() => null);
     if (!r || r.error || (s === 'carbon' && r.set !== 'carbon')) continue;
-    const pct = v => v == null ? '–' : Math.round(v * 100) + '%';
-    const lead = v => v == null ? '–' : (v / 60).toFixed(1) + ' h';
-    rows.push(`<tr><td>${r.generated_by} · approved</td><td>${pct(r.pct_in_zone)}</td><td>${pct(r.zone_area_pct)}</td><td>${lead(r.median_lead_min)}</td></tr>`);
-    rows.push(`<tr><td style="color:var(--muted)">${r.generated_by} · all proposed</td><td>${pct(r.if_all_approved.pct_in_zone)}</td><td>${pct(r.if_all_approved.zone_area_pct)}</td><td>${lead(r.if_all_approved.median_lead_min)}</td></tr>`);
+    results.push({ key: s, r });
   }
-  document.getElementById('dayScore').innerHTML = '<tr><th>zones</th><th>floods caught</th><th>city area</th><th>median lead</th></tr>' + rows.join('');
+  if (!results.length || results[0].r.n_events === 0) {
+    document.getElementById('kpiScope').textContent = 'LIVE FORECAST';
+    const r0 = results[0]?.r;
+    const nz = r0 ? r0.if_all_approved.n_zones : zones.length;
+    const area = r0 ? Math.round((r0.if_all_approved.zone_area_pct || 0) * 100) : '–';
+    el.innerHTML = `<div class="kpi-model highlight">
+      <div class="kpi-model-head">
+        <span>Gemini 4 Carbon</span>
+        <span class="mono text-cyan">${nz} zones · ${area}% SF</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--text-dim)">Live forecast for ${DATE} (${fcNight ? fcNight.total_mm + ' mm' : ''}). Zones await ops approval before the storm arrives.</div>
+    </div>`;
+    return;
+  }
+  document.getElementById('kpiScope').textContent = 'CARBON VS BASELINE';
+  el.innerHTML = results.map(({ key, r }) => {
+    const useAppr = r.n_zones > 0 && r.n_zones >= (r.if_all_approved?.n_zones ? 2 : 1);
+    const m = useAppr ? r : r.if_all_approved;
+    const caughtPct = m.pct_in_zone != null ? Math.round(m.pct_in_zone * 100) : 0;
+    const areaPct = m.zone_area_pct != null ? (m.zone_area_pct * 100).toFixed(1) : '0.0';
+    const isCarbon = key === 'carbon';
+    return `<div class="kpi-model ${isCarbon ? 'highlight' : ''}">
+      <div class="kpi-model-head">
+        <span>${isCarbon ? 'Gemini 4 Carbon' : 'Baseline'} <span class="mono" style="font-size:10px;color:var(--text-muted)">· ${useAppr ? 'approved' : 'all proposed'}</span></span>
+        <span class="mono" style="font-size:11px;color:${isCarbon ? 'var(--cyan)' : 'var(--text-dim)'}">${m.n_zones} zones · ${m.median_lead_min != null ? (m.median_lead_min / 60).toFixed(1) + 'h lead' : '–'}</span>
+      </div>
+      <div class="kpi-metrics">
+        <div class="kpi-bar-row">
+          <div class="kpi-bar-top"><span>Floods caught</span><b>${caughtPct}%</b></div>
+          <div class="track"><div class="fill" style="width:${caughtPct}%;background:${isCarbon ? 'var(--green)' : '#64748b'}"></div></div>
+        </div>
+        <div class="kpi-bar-row">
+          <div class="kpi-bar-top"><span>City area</span><b>${areaPct}%</b></div>
+          <div class="track"><div class="fill" style="width:${Math.min(100, parseFloat(areaPct) * 5)}%;background:${isCarbon ? 'var(--cyan)' : 'var(--amber)'}"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function caught(e) {
-  return zones.some(z => z.status === 'approved' && z.cells.includes(e.cell) && tmin(e.t) >= tmin(z.start) && tmin(e.t) <= tmin(z.end));
+  return zones.some(z => z.status === 'approved' && (z.cells || []).includes(e.cell) && tmin(e.t) >= tmin(z.start) && tmin(e.t) <= tmin(z.end));
 }
 
 function update(full) {
-  if (full) evLayer.clearLayers(), events.forEach(e => e._m = null);
+  const curMin = Math.floor(clock);
+  if (!full && curMin === lastRenderedMin) { drawRain(); return; }
+  lastRenderedMin = curMin;
+  if (full) { evLayer.clearLayers(); events.forEach(e => e._m = null); }
+
   let n = 0, inn = 0;
   for (const e of events) {
     const m = tmin(e.t);
     if (m > clock) { if (e._m) { evLayer.removeLayer(e._m); e._m = null; } continue; }
-    n++; const c = caught(e); if (c) inn++;
-    if (!e._m) e._m = L.circleMarker([e.lat, e.lon], {radius: 3.5, weight: 1}).bindTooltip(`${e.t.slice(11, 16)} · ${esc(e.address)}`).addTo(evLayer);
-    e._m.setStyle({color: c ? '#2fd18b' : '#ffffff', fillColor: c ? '#2fd18b' : '#ffffff', fillOpacity: 0.85});
+    n++;
+    const c = caught(e);
+    if (c) inn++;
+    if (!e._m) {
+      e._m = L.circleMarker([e.lat, e.lon], { radius: 3.6, weight: 1 })
+        .bindTooltip(`<b>${e.t.slice(11, 16)}</b> · ${esc(e.address)}`).addTo(evLayer);
+    }
+    e._m.setStyle({ color: c ? '#10b981' : '#f8fafc', fillColor: c ? '#10b981' : '#f8fafc', fillOpacity: 0.88 });
   }
-  document.getElementById('sN').textContent = n;
+  const timeStr = fmt(curMin);
+  document.getElementById('sN').textContent = DATE === '2026-11-18' ? n : 'LIVE';
+  document.getElementById('lblFloods').textContent = DATE === '2026-11-18' ? 'FLOODS SO FAR' : 'FORECAST MODE';
   document.getElementById('sIn').textContent = inn;
   document.getElementById('sPct').textContent = n ? Math.round(100 * inn / n) + '%' : '–';
-  document.getElementById('clock').textContent = fmt(Math.floor(clock));
+  document.getElementById('clock').textContent = timeStr;
+  document.getElementById('hudClock').textContent = timeStr;
+  document.getElementById('tripClockTag').textContent = `@ ${timeStr}`;
+
+  // Chapter pill highlight
+  document.querySelectorAll('#chapters button').forEach(b => {
+    const m = +b.dataset.min;
+    b.classList.toggle('on', Math.abs(curMin - m) < 25);
+  });
+
+  // Historical 11 AM Waymo Pause banner (only when no live camera toast is showing)
   const bn = document.getElementById('banner');
-  if (!bn.textContent.includes('saw water')) { bn.textContent = '11:00 AM · Waymo paused all San Francisco service'; bn.style.display = DATE === '2026-11-18' && clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none'; }
-  styleZones(); drawRain();
+  if (!camToastActive) {
+    bn.classList.remove('cam-toast');
+    if (DATE === '2026-11-18' && clock >= 11 * 60 && clock < 12 * 60 + 30) {
+      bn.textContent = '11:00 AM · Waymo paused all San Francisco service ("We\'ve paused for now due to weather")';
+      bn.style.display = 'block';
+    } else {
+      bn.style.display = 'none';
+    }
+  }
+  styleZones();
+  drawRain();
 }
 
+/* ---- Upgraded Rain Canvas + Pointer Drag + Hover Tooltip ---- */
 function drawRain() {
   const cv = document.getElementById('rain'), dpr = devicePixelRatio || 1;
-  const W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
-  const g = cv.getContext('2d'); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  const W = cv.clientWidth, H = cv.clientHeight;
+  if (!W || !H) return;
+  if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
   if (!fcNight) return;
-  const hrs = fcNight.hours.length, bw = W / hrs, max = Math.max(...fcNight.hours.map(h => h.mm), ...(fcLatest?.hours || []).map(h => h.mm), 1);
-  fcNight.hours.forEach((h, i) => { g.fillStyle = '#ffb020'; const y = h.mm / max * (H - 12); g.fillRect(i * bw + 2, H - y, bw * 0.45, y); });
-  (fcLatest?.hours || []).forEach((h, i) => { g.fillStyle = '#4da3ff'; const y = h.mm / max * (H - 12); g.fillRect(i * bw + 2 + bw * 0.45, H - y, bw * 0.45, y); });
-  g.fillStyle = '#8a919c'; g.font = '10px system-ui';
+
+  const hrs = fcNight.hours.length, bw = W / hrs;
+  const max = Math.max(...fcNight.hours.map(h => h.mm), ...(fcLatest?.hours || []).map(h => h.mm), 1);
+
+  // Subtle horizontal gridlines
+  g.strokeStyle = 'rgba(255,255,255,0.06)';
+  g.setLineDash([3, 3]);
+  g.beginPath();
+  g.moveTo(0, H * 0.5); g.lineTo(W, H * 0.5);
+  g.moveTo(0, 12); g.lineTo(W, 12);
+  g.stroke();
+  g.setLineDash([]);
+
+  g.fillStyle = '#64748b'; g.font = '10px "JetBrains Mono", monospace';
+  g.fillText(`${Math.ceil(max)} mm`, W - 36, 10);
+
+  const bar = (x, y, w, h, col) => {
+    if (h < 1) return;
+    g.fillStyle = col;
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, w, h, [2.5, 2.5, 0, 0]);
+    else g.rect(x, y, w, h);
+    g.fill();
+  };
+  fcNight.hours.forEach((h, i) => {
+    const bh = h.mm / max * (H - 14);
+    bar(i * bw + 2, H - bh, Math.max(2, bw * 0.42), bh, 'rgba(245, 158, 11, 0.88)');
+  });
+  (fcLatest?.hours || []).forEach((h, i) => {
+    const bh = h.mm / max * (H - 14);
+    bar(i * bw + 2 + bw * 0.44, H - bh, Math.max(2, bw * 0.42), bh, 'rgba(56, 189, 248, 0.88)');
+  });
+
+  g.fillStyle = '#64748b'; g.font = '10px "JetBrains Mono", monospace';
   for (let i = 0; i < hrs; i += 3) g.fillText(String(i).padStart(2, '0'), i * bw + 2, 10);
-  const x = clock / 60 * bw; g.fillStyle = '#e8eaed'; g.fillRect(x, 0, 2, H);
+
+  // Glowing Playhead Needle
+  const x = (clock / 60) * bw;
+  g.save();
+  g.shadowColor = '#38bdf8'; g.shadowBlur = 10;
+  g.fillStyle = '#f0f4f8';
+  g.fillRect(x - 1, 0, 2, H);
+  g.fillStyle = '#38bdf8';
+  g.beginPath(); g.arc(x, 4, 3.5, 0, Math.PI * 2); g.fill();
+  g.restore();
 }
 
-document.getElementById('rain').addEventListener('click', e => {
-  const r = e.target.getBoundingClientRect(); clock = Math.max(0, Math.min(24 * 60 - 1, (e.clientX - r.left) / r.width * 24 * 60)); update();
+const rainCv = document.getElementById('rain');
+const rainTip = document.getElementById('rainTip');
+let scrubbing = false;
+function scrubTo(e) {
+  const r = rainCv.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(0.999, (e.clientX - r.left) / r.width));
+  clock = ratio * 24 * 60;
+  update();
+}
+rainCv.addEventListener('pointerdown', e => { scrubbing = true; rainCv.setPointerCapture(e.pointerId); scrubTo(e); });
+rainCv.addEventListener('pointermove', e => {
+  const r = rainCv.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(0.999, (e.clientX - r.left) / r.width));
+  if (scrubbing) scrubTo(e);
+  if (fcNight) {
+    const hr = Math.min(fcNight.hours.length - 1, Math.floor(ratio * fcNight.hours.length));
+    const nMm = fcNight.hours[hr]?.mm ?? 0;
+    const lMm = fcLatest?.hours?.[hr]?.mm;
+    rainTip.textContent = lMm != null ? `${String(hr).padStart(2, '0')}:00 · ${nMm} mm (night) / ${lMm} mm (latest)` : `${String(hr).padStart(2, '0')}:00 · ${nMm} mm`;
+    rainTip.style.left = `${Math.max(70, Math.min(r.width - 70, e.clientX - r.left))}px`;
+    rainTip.style.display = 'block';
+  }
 });
+rainCv.addEventListener('pointerup', () => { scrubbing = false; });
+rainCv.addEventListener('pointerleave', () => { scrubbing = false; rainTip.style.display = 'none'; });
+
 document.getElementById('play').onclick = () => {
-  playing = !playing; if (playing && clock >= T1) clock = T0;
-  document.getElementById('play').textContent = playing ? '❚❚ Pause' : '▶ Play'; last = performance.now(); requestAnimationFrame(tick);
+  playing = !playing;
+  if (playing && clock >= T1) clock = T0;
+  document.getElementById('play').textContent = playing ? '❚❚' : '▶';
+  last = performance.now();
+  if (playing) requestAnimationFrame(tick);
 };
 function tick(now) {
   if (!playing) return;
-  clock += (now - last) / PLAY_MS * (T1 - T0); last = now;
-  if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶ Play'; }
-  update(); if (playing) requestAnimationFrame(tick);
+  clock += (now - last) / PLAY_MS * (T1 - T0);
+  last = now;
+  if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶'; }
+  update();
+  if (playing) requestAnimationFrame(tick);
 }
-// ---- live camera zones from the fleet ----
+document.querySelectorAll('#chapters button').forEach(b => b.onclick = () => {
+  playing = false; document.getElementById('play').textContent = '▶';
+  clock = +b.dataset.min; update();
+  if (tripLayer.getLayers().length) routeTrip();
+});
+
+/* ---- Live Camera Zones Polling (with Smart Bounds + Clean Banner Reset) ---- */
 let camN = -1;
 setInterval(async () => {
-  const z = await j(`/api/zones?date=${DATE}&set=${SET}`).catch(() => null); if (!z) return;
-  const cams = z.zones.filter(x => x.source === 'camera');
+  const z = await j(`/api/zones?date=${DATE}&set=${SET}`).catch(() => null);
+  if (!z) return;
+  const cams = (z.zones || []).filter(x => x.source === 'camera');
   if (camN >= 0 && cams.length > camN) {
     const nz = cams[cams.length - 1];
-    zones = z.zones; drawZones(); renderList(); update(true); loadScore(); select(nz.id);
-    const b = document.getElementById('banner');
-    b.textContent = `${nz.car_id || 'A car'} saw water (${Math.round((nz.flooded_p || 0) * 100)}%) → agent closed ${nz.name} for the fleet`;
-    b.style.display = 'block'; b.style.borderColor = '#4da3ff'; setTimeout(() => b.style.display = 'none', 7000);
+    zones = z.zones;
+    drawZones(); renderList(); update(true); loadScore();
+    select(nz.id, { noZoom: tripLayer.getLayers().length > 0, maxZoom: 13 });
+    const bn = document.getElementById('banner');
+    camToastActive = true;
+    bn.classList.add('cam-toast');
+    bn.textContent = `${nz.car_id || 'Fleet car'} saw water (${Math.round((nz.flooded_p || 0) * 100)}%) → Managed Agent closed ${nz.name}`;
+    bn.style.display = 'block';
+    clearTimeout(camToastTimer);
+    camToastTimer = setTimeout(() => { camToastActive = false; bn.style.display = 'none'; bn.textContent = ''; update(false); }, 8000);
     if (tripLayer.getLayers().length) routeTrip();
   }
   camN = cams.length;
 }, 3000);
 
-// ---- Genie 4 live world ----
+/* ---- Genie 4 Live World Modal + WASD HUD + Tab-Close Safety ---- */
 let gOpen = false, gPoll = null;
-const KEYMAP = {w: 'key_w', a: 'key_a', s: 'key_s', d: 'key_d', ArrowUp: 'arrow_up', ArrowDown: 'arrow_down', ArrowLeft: 'arrow_left', ArrowRight: 'arrow_right', ' ': 'space'};
+const KEYMAP = { w: 'key_w', a: 'key_a', s: 'key_s', d: 'key_d', ArrowUp: 'arrow_up', ArrowDown: 'arrow_down', ArrowLeft: 'arrow_left', ArrowRight: 'arrow_right', ' ': 'space' };
+const CAP_ALIAS = { arrow_up: 'key_w', arrow_down: 'key_s', arrow_left: 'key_a', arrow_right: 'key_d' };
 const held = new Set();
-const post = (u, b) => j(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)});
+const setCap = (k, on) => document.querySelector(`.keycap[data-k="${CAP_ALIAS[k] || k}"]`)?.classList.toggle('active', on);
+
 async function openGenie(zoneId) {
-  const el = document.getElementById('genie'); el.style.display = 'block'; gOpen = true;
-  document.getElementById('gStatus').textContent = 'Starting Genie 4 world from a real photo…';
-  const r = await post('/api/genie/start', {date: DATE, set: SET, zone_id: zoneId, max_seconds: 60}).catch(e => ({error: String(e)}));
+  const el = document.getElementById('genie');
+  el.style.display = 'grid'; gOpen = true;
+  document.getElementById('gBadgeTxt').textContent = 'GENIE 4 · STARTING';
+  document.getElementById('gStatus').textContent = 'Launching live Genie 4 world from 311 photo…';
+  const r = await post('/api/genie/start', { date: DATE, set: SET, zone_id: zoneId, max_seconds: 60 }).catch(e => ({ error: String(e) }));
   if (r.error) { document.getElementById('gStatus').textContent = r.error; return; }
   document.getElementById('gZone').textContent = r.photo.zone;
-  document.getElementById('gWhen').textContent = `${r.photo.address} · ${r.photo.t.slice(11, 16)} on ${r.photo.t.slice(0, 10)}`;
+  document.getElementById('gWhen').textContent = `${r.photo.address} · ${r.photo.t.slice(11, 16)}`;
   document.getElementById('gPhoto').src = '/' + r.photo.path;
   document.getElementById('gLive').src = '/api/genie/stream?ts=' + Date.now();
   clearInterval(gPoll);
   gPoll = setInterval(async () => {
-    const s = await j('/api/genie/status').catch(() => null); if (!s) return;
+    const s = await j('/api/genie/status').catch(() => null);
+    if (!s) return;
+    document.getElementById('gBadgeTxt').textContent = s.status === 'live' ? 'GENIE 4 LIVE · 720p 24fps' : `GENIE 4 · ${String(s.status).toUpperCase()}`;
     document.getElementById('gStatus').textContent = s.status === 'live'
-      ? `LIVE · ${s.seconds}s of ${s.max_seconds}s · ${s.frames} frames · first frame after ${s.first_frame_s}s · ~$${(s.seconds * 0.1).toFixed(2)}`
-      : `${s.status}${s.error ? ' · ' + s.error : ''}${s.status === 'warming' || s.status === 'starting' ? ' (first frame takes ~5 s)' : ''}`;
+      ? `${s.seconds}s / ${s.max_seconds}s · ${s.frames} frames · 1st frame ${s.first_frame_s}s · ~$${(s.seconds * 0.1).toFixed(2)}`
+      : `${s.status}${s.error ? ' · ' + s.error : ''}${s.status === 'warming' || s.status === 'starting' ? ' (~5s to first frame)' : ''}`;
     if (s.status === 'stopped' || s.status === 'error') clearInterval(gPoll);
   }, 1000);
 }
 async function closeGenie(save) {
-  clearInterval(gPoll); held.clear();
-  const r = await post('/api/genie/stop', {save}).catch(() => ({}));
-  if (save && r.path) { document.getElementById('gStatus').innerHTML = `Saved <a href="/${r.path}" target="_blank" style="color:var(--blue)">${r.path}</a>`; return; }
-  document.getElementById('genie').style.display = 'none'; gOpen = false; document.getElementById('gLive').src = '';
+  clearInterval(gPoll);
+  for (const k of held) setCap(k, false);
+  held.clear();
+  const r = await post('/api/genie/stop', { save }).catch(() => ({}));
+  if (save && r.path) {
+    document.getElementById('gBadgeTxt').textContent = 'GENIE 4 · SAVED';
+    document.getElementById('gStatus').innerHTML = `Saved <a href="/${r.path}" target="_blank" style="color:var(--cyan)">${r.path}</a>`;
+    return;
+  }
+  document.getElementById('genie').style.display = 'none';
+  gOpen = false;
+  document.getElementById('gLive').src = '';
 }
 document.getElementById('gClose').onclick = () => closeGenie(false);
 document.getElementById('gSave').onclick = () => closeGenie(true);
 addEventListener('keydown', e => {
-  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (!gOpen || !k) return;
-  e.preventDefault(); if (held.has(k)) return; held.add(k); post('/api/genie/key', {action: 'key_down', key: k});
+  if (!gOpen) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeGenie(false); return; }
+  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (!k) return;
+  e.preventDefault();
+  if (held.has(k)) return;
+  held.add(k); setCap(k, true);
+  post('/api/genie/key', { action: 'key_down', key: k }).catch(() => {});
 });
 addEventListener('keyup', e => {
-  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (!gOpen || !k) return;
-  held.delete(k); post('/api/genie/key', {action: 'key_up', key: k});
+  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key];
+  if (!gOpen || !k) return;
+  held.delete(k); setCap(k, false);
+  post('/api/genie/key', { action: 'key_up', key: k }).catch(() => {});
 });
+document.querySelectorAll('.keycap').forEach(btn => {
+  const k = btn.dataset.k;
+  const down = e => { e.preventDefault(); if (!gOpen || held.has(k)) return; held.add(k); setCap(k, true); post('/api/genie/key', { action: 'key_down', key: k }).catch(() => {}); };
+  const up = () => { if (!held.has(k)) return; held.delete(k); setCap(k, false); post('/api/genie/key', { action: 'key_up', key: k }).catch(() => {}); };
+  btn.addEventListener('pointerdown', down);
+  btn.addEventListener('pointerup', up);
+  btn.addEventListener('pointerleave', up);
+  btn.addEventListener('pointercancel', up);
+});
+addEventListener('pagehide', () => { if (gOpen) navigator.sendBeacon('/api/genie/stop', '{}'); });
 
-const tripLayer = L.layerGroup().addTo(map);
-let trip = {from: [37.7502, -122.4337], to: [37.7840, -122.4010]}, picking = 0;
+/* ---- Trip Rerouter with Presets ---- */
+const PRESETS = {
+  stanyan: { from: [37.7715, -122.4545], to: [37.7840, -122.4010] },
+  noe:     { from: [37.7502, -122.4337], to: [37.7840, -122.4010] }
+};
+let trip = { ...PRESETS.stanyan }, picking = 0;
+
 async function routeTrip() {
   const info = document.getElementById('tripInfo');
-  info.textContent = 'Routing…';
+  info.innerHTML = `<span class="text-dim mono">Routing via Valhalla…</span>`;
   const t = `${DATE}T${fmt(Math.floor(clock))}`;
-  const r = await j('/api/route', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({date: DATE, set: SET, from: trip.from, to: trip.to, t})}).catch(e => ({error: String(e)}));
+  const r = await post('/api/route', { date: DATE, set: SET, from: trip.from, to: trip.to, t }).catch(e => ({ error: String(e) }));
   tripLayer.clearLayers();
-  if (r.error) { info.textContent = 'Route failed: ' + r.error; return; }
-  L.polyline(r.default.coords, {color: '#ff4d4f', weight: 5, opacity: 0.8, dashArray: '8 6'}).addTo(tripLayer);
-  L.polyline(r.safe.coords, {color: '#2fd18b', weight: 5, opacity: 0.95}).addTo(tripLayer);
-  L.circleMarker(trip.from, {radius: 7, color: '#fff', fillColor: '#4da3ff', fillOpacity: 1}).bindTooltip('pickup').addTo(tripLayer);
-  L.circleMarker(trip.to, {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).bindTooltip('drop-off').addTo(tripLayer);
-  info.innerHTML = `At ${fmt(Math.floor(clock))}: normal route crosses <b style="color:var(--red)">${r.default.flood_cells ?? '?'}</b> flood-prone blocks (${r.default.min} min). ` +
-    `Flood-aware route crosses <b style="color:var(--green)">${r.safe.flood_cells ?? '?'}</b> (${r.safe.min} min, ${r.added_min >= 0 ? '+' : ''}${r.added_min} min). ` +
-    `<span style="opacity:.7">${r.active_zones} approved zones active · ${r.router}</span>`;
+  if (r.error) { info.innerHTML = `<span class="text-red">Route failed: ${esc(r.error)}</span>`; return; }
+  L.polyline(r.default.coords, { color: '#f43f5e', weight: 4.5, opacity: 0.85, dashArray: '8 6' }).addTo(tripLayer);
+  L.polyline(r.safe.coords, { color: '#10b981', weight: 5, opacity: 0.96 }).addTo(tripLayer);
+  L.circleMarker(trip.from, { radius: 7, color: '#fff', weight: 2, fillColor: '#38bdf8', fillOpacity: 1 }).bindTooltip('Pickup').addTo(tripLayer);
+  L.circleMarker(trip.to, { radius: 7, color: '#fff', weight: 2, fillColor: '#10b981', fillOpacity: 1 }).bindTooltip('Drop-off').addTo(tripLayer);
+  const sign = r.added_min >= 0 ? '+' : '';
+  info.innerHTML = `<div class="trip-badge-row">
+      <span class="trip-blocks"><span class="text-red">${r.default.flood_cells ?? '?'}</span> → <span class="text-green">${r.safe.flood_cells ?? '?'}</span> flood blocks</span>
+      <span class="trip-delta">${sign}${r.added_min} min (${r.safe.min}m vs ${r.default.min}m)</span>
+    </div>
+    <div class="trip-sub mono">${r.active_zones} active approved zones · ${esc(r.router)}</div>`;
 }
-document.getElementById('tripBtn').onclick = routeTrip;
-document.getElementById('pickBtn').onclick = () => { picking = 1; document.getElementById('tripInfo').textContent = 'Click the pickup point on the map…'; };
+document.querySelectorAll('[data-preset]').forEach(btn => btn.onclick = () => {
+  picking = 0;
+  document.querySelectorAll('.preset-pills .pill-btn').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  trip = { ...PRESETS[btn.dataset.preset] };
+  routeTrip();
+});
+document.getElementById('pickBtn').onclick = () => {
+  picking = 1;
+  document.querySelectorAll('.preset-pills .pill-btn').forEach(b => b.classList.remove('on'));
+  document.getElementById('pickBtn').classList.add('on');
+  document.getElementById('tripInfo').innerHTML = `<span class="text-cyan">Click pickup point on the map…</span>`;
+};
 map.on('click', e => {
   if (!picking) return;
   const p = [+e.latlng.lat.toFixed(5), +e.latlng.lng.toFixed(5)];
-  if (picking === 1) { trip.from = p; picking = 2; document.getElementById('tripInfo').textContent = 'Now click the drop-off point…'; }
-  else { trip.to = p; picking = 0; routeTrip(); }
+  if (picking === 1) {
+    trip.from = p; picking = 2;
+    document.getElementById('tripInfo').innerHTML = `<span class="text-cyan">Now click drop-off point on the map…</span>`;
+  } else {
+    trip.to = p; picking = 0; routeTrip();
+  }
 });
+
+/* ---- Controls & Mode Switching ---- */
 document.getElementById('approveAll').onclick = () => setStatus(zones.filter(z => z.status === 'proposed').map(z => z.id), 'approved');
 document.getElementById('resetAll').onclick = () => setStatus(zones.map(z => z.id), 'proposed');
-document.querySelectorAll('#setSeg button').forEach(b => b.onclick = () => { SET = b.dataset.set; loadZones(); });
+document.querySelectorAll('#zoneFilters button').forEach(b => b.onclick = () => {
+  zoneFilter = b.dataset.f;
+  document.querySelectorAll('#zoneFilters button').forEach(x => x.classList.toggle('on', x === b));
+  renderList();
+});
+document.querySelectorAll('#setSeg button').forEach(b => b.onclick = () => {
+  if (b.disabled) return;
+  SET = b.dataset.set;
+  history.replaceState(null, '', `?date=${DATE}&set=${SET}`);
+  loadZones();
+});
+
+async function loadDateContext(newDate) {
+  DATE = newDate;
+  history.replaceState(null, '', `?date=${DATE}&set=${SET}`);
+  playing = false; document.getElementById('play').textContent = '▶';
+  clock = T0; lastRenderedMin = -1; selected = null; camN = -1;
+  evLayer.clearLayers(); tripLayer.clearLayers();
+  const isLive = DATE !== '2026-11-18';
+  document.querySelectorAll('#modeSeg button').forEach(b => {
+    const match = b.dataset.date === DATE;
+    b.classList.toggle('on', match && !isLive);
+    b.classList.toggle('live-pill-on', match && isLive);
+  });
+  const baseBtn = document.getElementById('baseSetBtn');
+  baseBtn.disabled = isLive;
+  if (isLive) SET = 'carbon';
+  document.getElementById('clockDate').textContent = isLive ? `${DATE.slice(5)} · LIVE` : 'NOV 18 · PST';
+  events = await j(`/data/events_${DATE}.json`).catch(() => []);
+  fcNight = await j(`/data/forecast_${DATE}.json`);
+  fcLatest = await j(`/data/forecast_${DATE}_latest.json`).catch(() => null);
+  document.getElementById('srcPill').textContent = isLive
+    ? `LIVE · ${fcNight.total_mm} mm forecast`
+    : `${fcNight.total_mm} mm · ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source}`;
+  await loadZones();
+  loadScore();
+}
+
+document.querySelectorAll('#modeSeg button').forEach(b => b.onclick = () => {
+  if (b.dataset.date !== DATE) loadDateContext(b.dataset.date);
+});
 addEventListener('resize', drawRain);
 
 (async () => {
   const cells = await j('/data/cells.json'); grid = cells.grid;
-  events = await j(`/data/events_${DATE}.json`).catch(() => []);
-  fcNight = await j(`/data/forecast_${DATE}.json`);
-  fcLatest = await j(`/data/forecast_${DATE}_latest.json`).catch(() => null);
-  document.getElementById('datePill').textContent = `San Francisco · ${DATE}`;
-  document.getElementById('srcPill').textContent = `zones from ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source} forecast · ${fcNight.total_mm} mm`;
-  const live = await j('/data/live.json').catch(() => null);
-  const ml = document.getElementById('modeLink');
-  if (DATE === '2026-11-18') { if (live) { ml.textContent = `▶ LIVE: next storm ${live.date} (${live.total_mm} mm forecast)`; ml.href = `/?date=${live.date}`; } else ml.style.display = 'none'; }
-  else { ml.textContent = '◀ Replay Nov 18 (real floods)'; ml.href = '/'; document.getElementById('srcPill').textContent = `LIVE forecast · ${fcNight.total_mm} mm · zones await approval`; }
-  await loadZones(); loadScore();
-  // real Waymo data: tracts where Waymo reported collisions in Q3 2026 (its trip locations are redacted)
+  liveMeta = await j('/data/live.json').catch(() => null);
+  const liveBtn = document.getElementById('liveModeBtn');
+  if (liveMeta?.date) {
+    liveBtn.dataset.date = liveMeta.date;
+    liveBtn.textContent = `Live · ${liveMeta.date.slice(5)} (${liveMeta.total_mm} mm)`;
+  }
+  await loadDateContext(DATE);
+
+  // Real Waymo CPUC 2026 Q3 tract activity overlay
   const [wg, ws] = await Promise.all([j('/data/waymo_sf.geojson'), j('/data/waymo_stats.json')]).catch(() => [null, null]);
   if (wg) {
-    const wl = L.geoJSON(wg, {filter: f => f.properties.waymo_collisions_q3 > 0, interactive: true,
-      style: f => ({color: '#4da3ff', weight: 1.2, opacity: 0.7, fill: true, fillOpacity: 0.04, dashArray: '2 4'})})
-      .bindTooltip(l => `Census tract ${l.feature.properties.name.replace('Census Tract ', '')}<br>Waymo collisions, 2026 Q3: <b>${l.feature.properties.waymo_collisions_q3}</b><br>Nov 18 floods: <b>${l.feature.properties.nov18_floods}</b>`, {sticky: true});
+    const wl = L.geoJSON(wg, {
+      filter: f => f.properties.waymo_collisions_q3 > 0, interactive: true,
+      style: () => ({ color: '#38bdf8', weight: 1.2, opacity: 0.65, fill: true, fillOpacity: 0.04, dashArray: '3 4' })
+    }).bindTooltip(l => `Census Tract ${l.feature.properties.name.replace('Census Tract ', '')}<br>Waymo Q3 collisions: <b>${l.feature.properties.waymo_collisions_q3}</b><br>Nov 18 floods: <b>${l.feature.properties.nov18_floods}</b>`, { sticky: true });
     wl.addTo(map); wl.bringToBack();
-    document.getElementById('waymoTog').onchange = e => e.target.checked ? wl.addTo(map) : map.removeLayer(wl);
-    if (ws) document.getElementById('waymoTog').parentElement.title =
-      `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in the ${ws.tracts_with_waymo_collisions} tracts where Waymo reported collisions (of ${ws.sf_tracts}). NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} Waymo SF crash reports, ${ws.nhtsa_sgo.in_rain} in rain (${ws.nhtsa_sgo.months}).`;
+    document.getElementById('waymoTog').onchange = e => e.target.checked ? (wl.addTo(map), wl.bringToBack()) : map.removeLayer(wl);
+    if (ws) document.getElementById('waymoPill').title =
+      `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in ${ws.tracts_with_waymo_collisions}/${ws.sf_tracts} Waymo-active tracts. NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} crashes (${ws.nhtsa_sgo.in_rain} in rain).`;
   }
 })();
 </script>

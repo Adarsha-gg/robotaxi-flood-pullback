@@ -3,129 +3,425 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Fleet Camera</title>
+<title>Fleet Camera · AV Sensor Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0b0d10;--panel:#13161b;--line:#242a33;--text:#e8eaed;--muted:#8a919c;--red:#ff4d4f;--green:#2fd18b;--blue:#4da3ff;--amber:#ffb020}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif}
-header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-h1{font-size:17px;margin:0}h1 b{color:var(--blue)}
-a{color:var(--blue)}
-main{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;padding:16px}
-@media (max-width:900px){main{grid-template-columns:1fr}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
-video,#still{width:100%;border-radius:8px;background:#000;aspect-ratio:16/9;object-fit:cover;display:block}
-select,button{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
-button.go{border-color:var(--blue)}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-#verdict{font-size:30px;font-weight:700;margin:4px 0}
-.meter{height:10px;background:var(--bg);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
-.meter div{height:100%;background:var(--green);width:0;transition:width .3s}
-.muted{color:var(--muted);font-size:12px}
-.step{border-left:2px solid var(--blue);padding:4px 8px;margin:6px 0;font-size:12px}
-.step b{color:var(--blue)}
-pre{white-space:pre-wrap;font-size:11px;color:var(--muted);margin:2px 0 0}
+:root {
+  --bg: #07090d;
+  --surface: #0d1117;
+  --card: #131822;
+  --card-hover: #181f2c;
+  --glass: rgba(10, 14, 22, 0.82);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f0f4f8;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --amber: #f59e0b;
+  --amber-soft: rgba(245, 158, 11, 0.14);
+  --red: #f43f5e;
+  --red-soft: rgba(244, 63, 94, 0.16);
+  --green: #10b981;
+  --green-soft: rgba(16, 185, 129, 0.14);
+  --cyan: #38bdf8;
+  --cyan-soft: rgba(56, 189, 248, 0.14);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.45 var(--font-sans); -webkit-font-smoothing: antialiased; min-height: 100vh;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.ops-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 18px; height: 52px; background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.ops-left { display: flex; align-items: center; gap: 10px; }
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(56,189,248,0.2), 0 0 10px var(--cyan);
+  animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .5; transform: scale(.86); } }
+.brand-name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.02em; }
+.brand-name b { color: var(--cyan); }
+.brand-sub { color: var(--text-dim); font-size: 12px; margin-left: 6px; }
+.map-link {
+  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+  padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  color: var(--text); background: var(--card); border: 1px solid var(--border-strong); transition: all .15s;
+}
+.map-link:hover { border-color: var(--cyan); color: var(--cyan); }
+
+main {
+  max-width: 1420px; margin: 0 auto; padding: 18px;
+  display: grid; grid-template-columns: 1.32fr 1fr; gap: 16px;
+}
+@media (max-width: 960px) { main { grid-template-columns: 1fr; } .brand-sub { display: none; } }
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 12px;
+}
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+.tag {
+  font: 600 10px/1 var(--font-mono); padding: 4px 8px; border-radius: 99px;
+  background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(56,189,248,0.35);
+}
+
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ctrl-group { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-dim); }
+select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 6px 10px; font: 500 12px/1.2 var(--font-sans); outline: none; max-width: 310px;
+}
+select:focus { border-color: var(--cyan); }
+.seg {
+  display: inline-flex; padding: 2px; border-radius: 8px;
+  background: var(--bg); border: 1px solid var(--border);
+}
+.seg button {
+  background: transparent; border: none; color: var(--text-dim);
+  padding: 5px 10px; border-radius: 6px; font: 500 11.5px/1 var(--font-sans); cursor: pointer;
+}
+.seg button.on { background: #1b2434; color: var(--text); box-shadow: inset 0 0 0 1px rgba(56,189,248,0.38); }
+
+/* AV HUD Viewport */
+.hud-stage {
+  position: relative; width: 100%; aspect-ratio: 16/9; border-radius: 12px;
+  overflow: hidden; background: #04060a; border: 1px solid var(--border-strong);
+}
+video, #still { width: 100%; height: 100%; object-fit: cover; display: block; }
+.reticle { position: absolute; width: 22px; height: 22px; pointer-events: none; border-color: rgba(56,189,248,0.65); border-style: solid; border-width: 0; }
+.r-tl { top: 12px; left: 12px; border-top-width: 2px; border-left-width: 2px; border-radius: 4px 0 0 0; }
+.r-tr { top: 12px; right: 12px; border-top-width: 2px; border-right-width: 2px; border-radius: 0 4px 0 0; }
+.r-bl { bottom: 12px; left: 12px; border-bottom-width: 2px; border-left-width: 2px; border-radius: 0 0 0 4px; }
+.r-br { bottom: 12px; right: 12px; border-bottom-width: 2px; border-right-width: 2px; border-radius: 0 0 4px 0; }
+.hud-chip {
+  position: absolute; background: var(--glass); backdrop-filter: blur(8px);
+  border: 1px solid var(--border-strong); border-radius: 7px; padding: 4px 9px;
+  font: 600 11px/1.2 var(--font-mono); color: var(--text); pointer-events: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.hud-tl { top: 14px; left: 16px; }
+.hud-bl { bottom: 14px; left: 16px; color: var(--text-dim); }
+.hud-tr { top: 14px; right: 16px; }
+.rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1.2s infinite; }
+
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.btn {
+  background: var(--card); color: var(--text); border: 1px solid var(--border-strong);
+  border-radius: 8px; padding: 8px 13px; font: 600 12px/1 var(--font-sans); cursor: pointer; transition: all .15s;
+}
+.btn:hover:not(:disabled) { background: var(--card-hover); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary {
+  background: linear-gradient(135deg, rgba(14,165,233,0.26), rgba(56,189,248,0.16));
+  border-color: rgba(56,189,248,0.6); color: #e0f2fe;
+}
+.btn-primary:hover:not(:disabled) { background: rgba(56,189,248,0.32); }
+.btn-danger { border-color: rgba(244,63,94,0.45); color: #fecdd3; background: var(--red-soft); }
+.btn-danger:hover { background: rgba(244,63,94,0.26); }
+
+/* Decision 1 Verdict Box */
+.verdict-box {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+}
+.verdict-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 6px 0 10px; }
+#verdict { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1; }
+.depth-pill {
+  font: 700 11px/1 var(--font-mono); text-transform: uppercase; padding: 5px 9px; border-radius: 99px;
+  background: rgba(255,255,255,0.06); color: var(--text-dim); border: 1px solid var(--border);
+}
+.meter-wrap { position: relative; margin: 4px 0 10px; }
+.meter { height: 10px; background: var(--bg); border-radius: 99px; overflow: hidden; border: 1px solid var(--border); }
+.meter div { height: 100%; background: var(--green); width: 0; border-radius: 99px; transition: width .3s ease, background .2s ease; }
+.thresh-mark {
+  position: absolute; left: 80%; top: -4px; bottom: -4px; width: 2px;
+  background: rgba(255,255,255,0.55); pointer-events: none;
+}
+.thresh-lbl {
+  position: absolute; left: 80%; top: 14px; transform: translateX(-50%);
+  font: 600 9.5px/1 var(--font-mono); color: var(--text-muted);
+}
+.meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.mchip {
+  font: 500 11px/1.2 var(--font-mono); padding: 3px 7px; border-radius: 6px;
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-dim);
+}
+
+/* Managed Agent Timeline */
+.agent-box {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+  flex: 1; display: flex; flex-direction: column; gap: 10px;
+}
+.agent-status {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border);
+  font-size: 12px; font-weight: 600;
+}
+.agent-status.running { border-color: rgba(56,189,248,0.5); color: #bae6fd; }
+.agent-status.done { border-color: rgba(16,185,129,0.5); color: #a7f3d0; }
+.timeline { display: flex; flex-direction: column; gap: 8px; }
+.t-step {
+  position: relative; padding: 9px 11px 9px 14px; border-radius: 9px;
+  background: rgba(255,255,255,0.025); border: 1px solid var(--border);
+  border-left: 3px solid var(--cyan);
+}
+.t-step-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.t-tool { font: 700 12px/1 var(--font-mono); color: var(--cyan); }
+.t-ok { font: 600 10px/1 var(--font-mono); color: var(--green); }
+.t-body { font-size: 11.5px; color: var(--text-dim); word-break: break-word; }
+
+.dispatch {
+  padding: 11px 12px; border-radius: 10px;
+  background: linear-gradient(135deg, rgba(244,63,94,0.16), rgba(244,63,94,0.06));
+  border: 1px solid rgba(244,63,94,0.55);
+}
+.dispatch-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.dispatch-title { font-size: 13px; font-weight: 700; color: #ffe4e6; }
+.dispatch-meta { font: 600 10.5px/1 var(--font-mono); color: #fda4af; }
+.dispatch-msg { font-size: 12px; color: #fecdd3; margin: 0; }
+.muted { color: var(--text-muted); font-size: 11.5px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Fleet <b>Camera</b></h1>
-  <span class="muted">Every car is a flood sensor: Gemini Decision 1 judges each frame, and a Managed Agent closes the street for the whole fleet.</span>
-  <a href="/" target="_blank">Open fleet map ↗</a>
+
+<header class="ops-bar">
+  <div class="ops-left">
+    <span class="live-dot"></span>
+    <span class="brand-name">Fleet <b>Camera</b></span>
+    <span class="brand-sub">Every robotaxi is a flood sensor · Decision 1 → Antigravity Managed Agent → Fleet ODD</span>
+  </div>
+  <a class="map-link" href="/" target="_blank" rel="noopener">← Open Fleet Map ↗</a>
 </header>
+
 <main>
-  <div class="card">
-    <div class="row">
-      <label>Car <select id="car"><option>W-112</option><option>W-207</option><option>W-318</option></select></label>
-      <label>Position <select id="pos"></select></label>
-      <label>Source <select id="src"><option value="cam">Live webcam</option><option value="photo">Real 311 photo at this position</option></select></label>
+  <section class="card">
+    <div class="card-head">
+      <span class="card-title">Vehicle Front-Camera Feed</span>
+      <div class="seg" id="srcSeg">
+        <button data-v="cam" class="on">Live Webcam</button>
+        <button data-v="photo">Real 311 Photo</button>
+      </div>
     </div>
-    <video id="video" autoplay playsinline muted></video>
-    <img id="still" style="display:none">
-    <div class="row">
-      <button class="go" id="start">▶ Start sending frames (every 2 s)</button>
-      <button id="once">Send one frame</button>
-      <button id="reset">Reset camera zones</button>
-      <span class="muted" id="sent"></span>
+
+    <div class="controls">
+      <label class="ctrl-group">Vehicle
+        <select id="car"><option>W-112</option><option>W-207</option><option>W-318</option></select>
+      </label>
+      <label class="ctrl-group" style="flex:1;min-width:220px">Location
+        <select id="pos" style="width:100%"></select>
+      </label>
     </div>
-    <p class="muted">Photos come from San Francisco 311 street-flooding reports on 2026-11-18 (resident uploads, DataSF).</p>
-  </div>
-  <div class="card">
-    <div class="muted">Gemini Decision 1 · “Is standing water covering the roadway?”</div>
-    <div id="verdict">–</div>
-    <div class="meter"><div id="bar"></div></div>
-    <div class="muted" id="vmeta" style="margin-top:6px"></div>
-    <h3 style="font-size:13px;margin:16px 0 6px">Managed Agent incident</h3>
-    <div id="inc" class="muted">Waiting for a flooded frame (p ≥ 0.80)…</div>
-  </div>
+
+    <div class="hud-stage">
+      <video id="video" autoplay playsinline muted></video>
+      <img id="still" style="display:none" alt="SF 311 road photo">
+      <i class="reticle r-tl"></i><i class="reticle r-tr"></i><i class="reticle r-bl"></i><i class="reticle r-br"></i>
+      <div class="hud-chip hud-tl"><span class="rec-dot"></span><span id="hudCar">CAM-FRONT · W-112</span></div>
+      <div class="hud-chip hud-tr" id="hudSrc">LIVE WEBCAM</div>
+      <div class="hud-chip hud-bl" id="hudLoc">SF · loading…</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="start">▶ Start 2s Stream</button>
+      <button class="btn" id="once">Send One Frame</button>
+      <button class="btn btn-danger" id="reset" style="margin-left:auto">Reset Camera Zones</button>
+      <span class="muted mono" id="sent">0 frames</span>
+    </div>
+    <div class="muted">Real street photos come from San Francisco 311 flooding reports on 2026-11-18 (DataSF). Tip: select <b>691 2ND ST</b> for a real Waymo I-PACE in Nov 18 floodwater outside all forecast zones.</div>
+  </section>
+
+  <section class="card">
+    <div class="verdict-box">
+      <div class="card-head">
+        <span class="card-title">Gemini Decision 1 · Roadway Flood Classifier</span>
+        <span class="tag">models/gemini-decision-1</span>
+      </div>
+      <div class="verdict-row">
+        <div id="verdict" class="mono">STANDBY</div>
+        <span id="depthPill" class="depth-pill">depth: –</span>
+      </div>
+      <div class="meter-wrap">
+        <div class="meter"><div id="bar"></div></div>
+        <div class="thresh-mark"></div>
+        <div class="thresh-lbl">80% trigger</div>
+      </div>
+      <div class="meta-row" id="vmeta">
+        <span class="mchip">Prompt: "Is standing water covering the roadway?"</span>
+      </div>
+    </div>
+
+    <div class="agent-box">
+      <div class="card-head">
+        <span class="card-title">Autonomous Incident Response</span>
+        <span class="tag">antigravity-preview-09-2026</span>
+      </div>
+      <div id="inc" class="muted">Waiting for a flooded camera frame (p ≥ 0.80) to trigger the Managed Agent…</div>
+    </div>
+  </section>
 </main>
-<canvas id="cv" width="1280" height="720" style="display:none"></canvas>
+
+<canvas id="cv" width="640" height="360" style="display:none"></canvas>
+
 <script>
 const DATE = '2026-11-18';
 const $ = id => document.getElementById(id);
-let photos = [], timer = null, nSent = 0, lastInc = null;
-const j = (u, o) => fetch(u, o).then(r => r.json());
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let photos = [], timer = null, nSent = 0, lastInc = null, srcMode = 'cam', inFlight = false;
+
+async function j(u, o) {
+  const r = await fetch(u, o);
+  if (!r.ok) throw new Error(`${u} (${r.status})`);
+  return r.json();
+}
+
+function photo() { return photos[+$('pos').value] || photos[0]; }
+
+function updateHud() {
+  const p = photo();
+  $('hudCar').textContent = `CAM-FRONT · ${$('car').value}`;
+  $('hudSrc').textContent = srcMode === 'photo' ? '311 STREET PHOTO' : 'LIVE WEBCAM';
+  if (p) $('hudLoc').textContent = `${p.address} · ${p.lat.toFixed(4)}, ${p.lon.toFixed(4)} (${p.t.slice(11, 16)})`;
+}
+
+function showSource() {
+  const usePhoto = srcMode === 'photo';
+  document.querySelectorAll('#srcSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === srcMode));
+  $('video').style.display = usePhoto ? 'none' : 'block';
+  $('still').style.display = usePhoto ? 'block' : 'none';
+  if (usePhoto && photo()) $('still').src = '/' + photo().path;
+  updateHud();
+}
 
 async function init() {
   photos = await j(`/data/photos_${DATE}.json`);
   const seen = new Set();
-  $('pos').innerHTML = photos.filter(p => !seen.has(p.address) && seen.add(p.address)).slice(0, 25)
-    .map(p => `<option value="${photos.indexOf(p)}">${p.address} (${p.t.slice(11, 16)})</option>`).join('');
+  // Prioritize iconic Nov 18 sites (691 2nd St Waymo photo, 402 Ellis, 199 Jones) at top of selector
+  const priority = p => /691 2ND|402 ELLIS|199 JONES|BRODERICK/i.test(p.address) ? 0 : 1;
+  const unique = photos.filter(p => !seen.has(p.address) && seen.add(p.address));
+  unique.sort((a, b) => priority(a) - priority(b));
+  $('pos').innerHTML = unique.slice(0, 35)
+    .map(p => `<option value="${photos.indexOf(p)}">${esc(p.address)} (${p.t.slice(11, 16)})${/691 2ND/i.test(p.address) ? ' ★ Waymo' : ''}</option>`).join('');
+
   try {
-    const s = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
+    const s = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } });
     $('video').srcObject = s;
-  } catch (e) { $('src').value = 'photo'; $('vmeta').textContent = 'No webcam access, so using real 311 photos.'; }
+  } catch (e) {
+    srcMode = 'photo';
+    $('vmeta').innerHTML = `<span class="mchip">Webcam unavailable — switched to real 311 photo mode</span>`;
+  }
   showSource();
 }
-function photo() { return photos[+$('pos').value]; }
-function showSource() {
-  const usePhoto = $('src').value === 'photo';
-  $('video').style.display = usePhoto ? 'none' : 'block';
-  $('still').style.display = usePhoto ? 'block' : 'none';
-  if (usePhoto) $('still').src = '/' + photo().path;
-}
-$('src').onchange = showSource; $('pos').onchange = showSource;
+
+document.querySelectorAll('#srcSeg button').forEach(b => b.onclick = () => { srcMode = b.dataset.v; showSource(); });
+$('pos').onchange = showSource;
+$('car').onchange = updateHud;
 
 async function frameB64() {
   const cv = $('cv'), g = cv.getContext('2d');
-  const el = $('src').value === 'photo' ? $('still') : $('video');
-  if (el.tagName === 'IMG' && !el.complete) await new Promise(r => el.onload = r);
+  const el = srcMode === 'photo' ? $('still') : $('video');
+  if (el.tagName === 'IMG' && !el.complete) await new Promise(r => { el.onload = r; });
   const w = el.videoWidth || el.naturalWidth, h = el.videoHeight || el.naturalHeight;
-  cv.width = Math.min(1280, w); cv.height = Math.round(cv.width * h / w);
+  if (!w || !h) throw new Error('Camera frame not ready yet — wait 1s or switch to Real 311 Photo.');
+  // Downscale to 640px wide so Decision 1 stays fast (~250-400ms)
+  cv.width = Math.min(640, w);
+  cv.height = Math.round(cv.width * h / w);
   g.drawImage(el, 0, 0, cv.width, cv.height);
-  return cv.toDataURL('image/jpeg', 0.85);
+  return cv.toDataURL('image/jpeg', 0.82);
 }
+
 async function send() {
-  const p = photo();
-  const t0 = performance.now();
-  const r = await j('/api/camera', {method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({image_b64: await frameB64(), lat: p.lat, lon: p.lon, car_id: $('car').value, t: p.t.slice(0, 16), date: DATE})});
-  $('sent').textContent = `${++nSent} frames sent`;
-  if (r.error) { $('vmeta').textContent = r.error; return; }
-  const v = r.verdict, pct = Math.round(v.flooded_p * 100);
-  $('verdict').textContent = v.flooded_p >= 0.8 ? `FLOODED · ${pct}%` : `clear · ${pct}%`;
-  $('verdict').style.color = v.flooded_p >= 0.8 ? 'var(--red)' : 'var(--green)';
-  $('bar').style.width = pct + '%'; $('bar').style.background = v.flooded_p >= 0.8 ? 'var(--red)' : 'var(--green)';
-  $('vmeta').textContent = `depth: ${v.depth_label} (${v.depth_score}) · Decision 1 ${v.latency_ms} ms · round trip ${Math.round(performance.now() - t0)} ms · ${v.car_id} at ${p.address}`;
-  if (r.incident && r.incident.id) lastInc = r.incident.id;
+  if (inFlight) return;
+  inFlight = true;
+  $('once').disabled = true;
+  try {
+    const p = photo();
+    const t0 = performance.now();
+    const img = await frameB64();
+    const r = await j('/api/camera', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_b64: img, lat: p.lat, lon: p.lon, car_id: $('car').value, t: p.t.slice(0, 16), date: DATE })
+    });
+    $('sent').textContent = `${++nSent} frames`;
+    if (r.error) { $('vmeta').innerHTML = `<span class="mchip" style="color:var(--red)">${esc(r.error)}</span>`; return; }
+    const v = r.verdict, pct = Math.round(v.flooded_p * 100), hit = v.flooded_p >= 0.8;
+    $('verdict').textContent = hit ? `FLOODED · ${pct}%` : `CLEAR · ${pct}%`;
+    $('verdict').style.color = hit ? 'var(--red)' : 'var(--green)';
+    $('bar').style.width = `${pct}%`;
+    $('bar').style.background = hit ? 'var(--red)' : 'var(--green)';
+    $('depthPill').textContent = `depth: ${v.depth_label} (${v.depth_score})`;
+    $('depthPill').style.color = hit ? '#fda4af' : '#6ee7b7';
+    $('depthPill').style.borderColor = hit ? 'rgba(244,63,94,0.5)' : 'rgba(16,185,129,0.5)';
+    $('vmeta').innerHTML =
+      `<span class="mchip">Decision 1: <b>${v.latency_ms} ms</b></span>` +
+      `<span class="mchip">Round-trip: <b>${Math.round(performance.now() - t0)} ms</b></span>` +
+      `<span class="mchip">${esc(v.car_id)} @ ${esc(p.address)}</span>`;
+    if (r.incident && r.incident.id) { lastInc = r.incident.id; pollInc(); }
+  } catch (e) {
+    $('vmeta').innerHTML = `<span class="mchip" style="color:var(--red)">${esc(e.message)}</span>`;
+  } finally {
+    inFlight = false;
+    $('once').disabled = false;
+  }
 }
+
+function summarizeStep(s) {
+  const a = s.args || {};
+  if (s.tool === 'get_cell_history') return `Inspected pre-storm 311 history & 3×3 neighbors for cell <b>${esc(a.cell)}</b>`;
+  if (s.tool === 'get_forecast') return `Checked hourly rain curve & remaining precipitation for <b>${esc(a.date)}</b>`;
+  if (s.tool === 'propose_zone') return `Published <b>${(a.cells || []).length}-cell</b> Dynamic ODD closure (${esc(String(a.start || '').slice(11, 16))}–${esc(String(a.end || '').slice(11, 16))})`;
+  if (s.tool === 'judge_frame') return `Verified roadway frame via Decision 1`;
+  return esc(JSON.stringify(a).slice(0, 180));
+}
+
 async function pollInc() {
   const list = await j(`/api/camera/incidents?date=${DATE}`).catch(() => []);
   const i = list.find(x => x.id === lastInc) || list[0];
   if (!i) return;
-  const secs = Math.round((Date.now() / 1000) - i.started);
-  let h = `<div><b>${i.status === 'running' ? `Agent running… ${secs}s` : i.status === 'zone_added' ? `Zone added for the whole fleet in ${i.agent_s}s` : i.status}</b> · ${i.verdict.car_id} at ${i.verdict.cell}</div>`;
-  for (const s of i.steps || []) h += `<div class="step"><b>${s.tool}</b><pre>${JSON.stringify(s.args).slice(0, 220)}</pre></div>`;
-  if (i.zone) h += `<div class="step" style="border-color:var(--red)"><b style="color:var(--red)">${i.zone.name}</b> · ${i.zone.start?.slice(11, 16)}–${i.zone.end?.slice(11, 16)} · ${i.zone.cells?.length} cells<pre>${i.zone.fleet_notice || i.zone.reason || ''}</pre></div>`;
-  if (i.error) h += `<div class="step" style="border-color:var(--red)">${i.error}</div>`;
-  $('inc').innerHTML = h;
+  const secs = Math.max(0, Math.round(Date.now() / 1000 - i.started));
+  const statusCls = i.status === 'running' ? 'running' : i.status === 'zone_added' ? 'done' : '';
+  const statusTxt = i.status === 'running'
+    ? `● Agent investigating drainage basin… ${secs}s`
+    : i.status === 'zone_added'
+      ? `✓ Fleet corridor closed in ${i.agent_s}s`
+      : i.status;
+  let html = `<div class="agent-status ${statusCls}"><span>${statusTxt}</span><span class="mono" style="opacity:.8">${esc(i.verdict.car_id)} · ${esc(i.verdict.cell)}</span></div>`;
+  if ((i.steps || []).length) {
+    html += `<div class="timeline">` + i.steps.map((s, idx) =>
+      `<div class="t-step"><div class="t-step-head"><span class="t-tool">${idx + 1}. ${esc(s.tool)}()</span><span class="t-ok">✓ OK</span></div><div class="t-body">${summarizeStep(s)}</div></div>`
+    ).join('') + `</div>`;
+  }
+  if (i.zone) {
+    html += `<div class="dispatch">
+      <div class="dispatch-head">
+        <span class="dispatch-title">🚨 ${esc(i.zone.name)}</span>
+        <span class="dispatch-meta">${esc(i.zone.start?.slice(11, 16))}–${esc(i.zone.end?.slice(11, 16))} · ${(i.zone.cells || []).length} cells</span>
+      </div>
+      <p class="dispatch-msg">${esc(i.zone.fleet_notice || i.zone.reason || 'Corridor added to fleet exclusion layer.')}</p>
+    </div>`;
+  }
+  if (i.error) html += `<div class="dispatch"><div class="dispatch-title">Error</div><p class="dispatch-msg">${esc(i.error)}</p></div>`;
+  $('inc').innerHTML = html;
 }
+
 $('once').onclick = send;
 $('start').onclick = () => {
-  if (timer) { clearInterval(timer); timer = null; $('start').textContent = '▶ Start sending frames (every 2 s)'; return; }
-  send(); timer = setInterval(send, 2000); $('start').textContent = '❚❚ Stop';
+  if (timer) { clearInterval(timer); timer = null; $('start').textContent = '▶ Start 2s Stream'; return; }
+  send(); timer = setInterval(send, 2000); $('start').textContent = '❚❚ Stop Stream';
 };
-$('reset').onclick = async () => { await j('/api/camera/reset', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date: DATE})}); lastInc = null; $('inc').textContent = 'Camera zones cleared.'; };
+$('reset').onclick = async () => {
+  await j('/api/camera/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: DATE }) });
+  lastInc = null;
+  $('inc').innerHTML = `<span class="muted">Camera zones cleared. Waiting for next flooded frame (p ≥ 0.80)…</span>`;
+};
 setInterval(pollInc, 1500);
 init();
 </script>
