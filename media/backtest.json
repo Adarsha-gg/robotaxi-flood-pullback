@@ -1,0 +1,127 @@
+{
+  "n_storms": 15,
+  "area_cells": 347,
+  "area_pct": 0.08,
+  "mean_caught": {
+    "corridor": 0.4478,
+    "baseline": 0.4286,
+    "random": 0.0794
+  },
+  "per_storm": [
+    {
+      "date": "2019-12-07",
+      "flooded_cells": 303,
+      "corridor": 0.3993,
+      "baseline": 0.3927,
+      "random": 0.08
+    },
+    {
+      "date": "2021-10-24",
+      "flooded_cells": 279,
+      "corridor": 0.4516,
+      "baseline": 0.4409,
+      "random": 0.0785
+    },
+    {
+      "date": "2024-11-22",
+      "flooded_cells": 254,
+      "corridor": 0.4213,
+      "baseline": 0.4094,
+      "random": 0.08
+    },
+    {
+      "date": "2019-01-17",
+      "flooded_cells": 248,
+      "corridor": 0.3911,
+      "baseline": 0.3911,
+      "random": 0.0781
+    },
+    {
+      "date": "2014-12-11",
+      "flooded_cells": 228,
+      "corridor": 0.2763,
+      "baseline": 0.2632,
+      "random": 0.0804
+    },
+    {
+      "date": "2022-12-31",
+      "flooded_cells": 214,
+      "corridor": 0.4019,
+      "baseline": 0.3598,
+      "random": 0.0785
+    },
+    {
+      "date": "2019-11-26",
+      "flooded_cells": 211,
+      "corridor": 0.4455,
+      "baseline": 0.436,
+      "random": 0.0769
+    },
+    {
+      "date": "2021-12-13",
+      "flooded_cells": 198,
+      "corridor": 0.4697,
+      "baseline": 0.4394,
+      "random": 0.0785
+    },
+    {
+      "date": "2014-12-03",
+      "flooded_cells": 195,
+      "corridor": 0.4308,
+      "baseline": 0.4154,
+      "random": 0.0777
+    },
+    {
+      "date": "2023-12-18",
+      "flooded_cells": 188,
+      "corridor": 0.5319,
+      "baseline": 0.516,
+      "random": 0.0812
+    },
+    {
+      "date": "2025-10-13",
+      "flooded_cells": 188,
+      "corridor": 0.4681,
+      "baseline": 0.4468,
+      "random": 0.0796
+    },
+    {
+      "date": "2009-10-13",
+      "flooded_cells": 174,
+      "corridor": 0.5115,
+      "baseline": 0.4598,
+      "random": 0.0784
+    },
+    {
+      "date": "2025-11-13",
+      "flooded_cells": 173,
+      "corridor": 0.4913,
+      "baseline": 0.4913,
+      "random": 0.0817
+    },
+    {
+      "date": "2023-01-10",
+      "flooded_cells": 172,
+      "corridor": 0.5465,
+      "baseline": 0.5058,
+      "random": 0.0821
+    },
+    {
+      "date": "2025-12-26",
+      "flooded_cells": 156,
+      "corridor": 0.4808,
+      "baseline": 0.4615,
+      "random": 0.079
+    }
+  ],
+  "worst_storm": {
+    "date": "2014-12-11",
+    "corridor": 0.2763
+  },
+  "best_storm": {
+    "date": "2023-01-10",
+    "corridor": 0.5465
+  },
+  "caveat": "Spatial memory only. Past forecasts are not replayed. Unit is flooded cells, not reports.",
+  "one_liner": "Across 15 past storms, flood memory chosen before each storm caught 44.8% of flooded blocks at 8% of the city (random: 7.9%)."
+}
