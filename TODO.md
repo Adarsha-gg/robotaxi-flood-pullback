@@ -43,7 +43,7 @@ Status values: `todo` · `doing` · `done` · `blocked` · `cut`
 | G9 | `gem/explain.py`: `explain_decision(plan, sim, reroute)` (Carbon, structured, template fallback) | done (Gemini) | `.venv/bin/python -m gem.explain media/sim_cache/plan_sample.json media/sim_cache/r50_c66/result.json` → `gemini-4-carbon` in 5.36s (cites `2026-11-16`, `8.6`, `17`, `"simulated"`); `GEMINI_API_KEY=bad` → `template` in 145ms, exit 0. |
 | G10 | `gem/agent.py`: `run_ride(plan, tools, on_step)` + `load_ride_trace` (Managed Agent for the ride) | doing (Gemini) | Wave 3 ($5k Managed Agents prize). `media/sim_cache/r50_c66/result.json` ready. |
 | G11 | `gem/backtest.py`: leave-one-storm-out over 15 past storms → `media/backtest.json` | done (Gemini) | `.venv/bin/python -m gem.backtest` (0.36s): `corridor` **44.8%** beats `baseline` **42.9%** (wins 13/15, ties 2, loses 0; random **7.9%** at 8% SF). `media/backtest.json` ready. |
-| G12 | Pitch drafts in `media/pitch/` (demo script, backup capture list, How it works, Devpost) | doing (Gemini) | Wave 3. Four markdown files; script ≤ 180 s; every number traceable. |
+| G12 | Pitch drafts in `media/pitch/` (demo script, backup capture list, How it works, Devpost) | done (Gemini) | Four drafts in `media/pitch/`: `DEMO_SCRIPT.md` (180s exact, 3x `"simulated"`, G7/G9/G10 fallbacks), `BACKUP_CAPTURE.md` (60s), `HOW_IT_WORKS.md` (144w prose + 5-model table), `DEVPOST.md` (all 6 sections ≤120w). |
 | G13 | Stretch: `sim.review_clip` (Hydrogen reviews the cached Genie clip) | done (Gemini) | `.venv/bin/python -m gem.sim review media/sim_cache/r50_c66/clip.mp4` → `media/sim_cache/r50_c66/video.json`: `flooded_p: 0.98`, `ankle`, `first_water_s: 0.0` (8.86s, offline only). |
 
 ## Messages
