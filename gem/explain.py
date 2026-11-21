@@ -241,7 +241,7 @@ def _extract_context(
     allowed_mm: list[float] = []
     if peak.get("mm") is not None:
         allowed_mm.append(peak_mm)
-    if plan.get("forecast_6h_mm") is not None:
+    if raw_6h is not None:
         allowed_mm.append(forecast_6h_mm)
     if not allowed_mm:
         allowed_mm.append(peak_mm)
@@ -551,28 +551,39 @@ class AutonomousDecisionDraft(BaseModel):
 
 def _fallback_decide(ctx: dict[str, Any], latency_ms: int) -> dict[str, Any]:
     """Deterministic safety-first autonomous fallback if Carbon times out or fails."""
-    verdict = ctx.get("verdict") if isinstance(ctx.get("verdict"), dict) else {}
+    raw_verdict = (
+        ctx.get("verdict")
+        or ctx.get("genie4_simulation_judged_by_decision1")
+        or ctx.get("genie4_simulation_at_eta_judged_by_decision1")
+    )
+    verdict = raw_verdict if isinstance(raw_verdict, dict) else {}
     v_act = str(verdict.get("action") or "").lower()
     lane_p = _safe_float(verdict.get("lane_covered", verdict.get("flooded_p")), 0.0)
     p_tire = _safe_float(verdict.get("p_tire_or_worse"), 0.0)
-    has_risky = bool(ctx.get("fastest_route", {}).get("street_flood_blocks_on_it"))
+    lane_closed = _safe_float(verdict.get("lane_closed"), 0.0)
+    has_risky = bool(
+        (ctx.get("fastest_route") or {}).get("street_flood_blocks_on_it")
+        if isinstance(ctx.get("fastest_route"), dict)
+        else False
+    )
     should_reroute = (
         v_act in ("avoid", "slow")
         or lane_p >= 0.55
         or p_tire >= 0.45
+        or lane_closed >= 0.60
         or (not verdict and has_risky)
     )
     action = "reroute" if should_reroute else "keep_route"
     return {
         "action": action,
-        "confidence": round(max(0.75, lane_p) if should_reroute else max(0.75, 1.0 - lane_p), 2),
-        "headline": "Autonomously rerouting around flooded blocks ahead" if should_reroute else "Continuing on current route: road clear for travel",
+        "confidence": round(max(0.75, lane_p, lane_closed) if should_reroute else max(0.75, 1.0 - max(lane_p, lane_closed)), 2),
+        "headline": "Autonomously rerouting around roadway hazard ahead" if should_reroute else "Continuing on current route: road clear for travel",
         "reasons": [
-            "Autonomous safety policy prioritizes avoiding standing roadway water over minor travel-time savings.",
-            f"Simulated/assessed roadway flood signal: action={v_act or 'pre_trip'}, lane_covered={lane_p:.2f}.",
+            "Autonomous safety policy prioritizes avoiding standing roadway water or lane closures over minor travel-time savings.",
+            f"Simulated/assessed roadway signal: action={v_act or 'pre_trip'}, lane_covered={lane_p:.2f}, lane_closed={lane_closed:.2f}.",
         ],
         "rider_message": (
-            "Taking a slightly different route to stay clear of heavy rain and street water ahead."
+            "Taking a slightly different route to stay clear of heavy rain and roadway obstructions ahead."
             if should_reroute
             else "Continuing along your current route; road conditions ahead look clear."
         ),

@@ -58,6 +58,13 @@ CAR_QUESTIONS: dict[str, dict[str, Any]] = {
             "so a self-driving car could not tell where the road edge is?"
         ),
     },
+    "lane_closed": {
+        "type": "noul",
+        "instructions": (
+            "Is any travel lane closed or blocked by cones, barriers, a construction zone, "
+            "workers, a flagger or police directing traffic?"
+        ),
+    },
 }
 
 SIM_QUESTIONS = CAR_QUESTIONS
@@ -135,13 +142,22 @@ def build_prompt(watch: dict, warning: dict) -> str:
         date_str = str(peak.get("t", ""))[:10] or "2026-11-18"
         name = (watch or {}).get("name", "San Francisco")
         n_storm_days = (watch or {}).get("n_storm_days", 0)
-        return (
+        prompt = (
             f"Forward-facing roof camera of a driverless robotaxi in the travel lane, approaching {name}, "
             f"San Francisco, at {t_hhmm} on {date_str}. {peak.get('mm', 0)} mm of rain in one hour on saturated "
             f"streets; this intersection's roadway flooded in {n_storm_days} past storms. Show the water "
             f"across the driving lane and how high it reaches on the wheels of cars ahead. The robotaxi drives "
             f"forward slowly in its lane. Keep the real street layout from the reference photo."
         )
+        closures = (watch or {}).get("closures")
+        if isinstance(closures, list) and closures and isinstance(closures[0], dict):
+            c0 = closures[0]
+            prompt += (
+                f" There is also a permitted lane closure on {str(c0.get('street', '')).title()} between "
+                f"{str(c0.get('from', '')).title()} and {str(c0.get('to', '')).title()} "
+                f"({c0.get('impact', 'lane closure')}): orange cones and barriers close part of the roadway."
+            )
+        return prompt
     except Exception:
         return (
             "Forward-facing roof camera of a driverless robotaxi in the travel lane in San Francisco. "
@@ -204,6 +220,7 @@ def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
 
     lane_covered = round(_clamp01(res.answers["lane_covered"].noul), 4)
     edges_hidden = round(_clamp01(res.answers["edges_hidden"].noul), 4)
+    lane_closed = round(_clamp01(res.answers["lane_closed"].noul), 4)
 
     depth_ans = res.answers["car_depth"]
     max_score = float(len(CAR_DEPTH_CRITERIA) - 1)
@@ -222,13 +239,16 @@ def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
     depth_label = CAR_DEPTH_CRITERIA[min(max(depth_level, 0), len(CAR_DEPTH_CRITERIA) - 1)]
     action = (
         "avoid"
-        if (lane_covered >= 0.6 and p_tire_or_worse >= 0.5) or (edges_hidden >= 0.6 and lane_covered >= 0.6)
-        else ("slow" if lane_covered >= 0.5 else "proceed")
+        if (lane_covered >= 0.6 and p_tire_or_worse >= 0.5)
+        or (edges_hidden >= 0.6 and lane_covered >= 0.6)
+        or lane_closed >= 0.7
+        else ("slow" if lane_covered >= 0.5 or lane_closed >= 0.45 else "proceed")
     )
 
     return {
         "lane_covered": lane_covered,
         "edges_hidden": edges_hidden,
+        "lane_closed": lane_closed,
         "depth_level": depth_level,
         "p_tire_or_worse": p_tire_or_worse,
         "flooded_p": lane_covered,
@@ -239,6 +259,7 @@ def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
         "rubric": {
             "lane_covered": lane_covered,
             "edges_hidden": edges_hidden,
+            "lane_closed": lane_closed,
             "p_tire_or_worse": p_tire_or_worse,
             # Back-compat aliases for v1 UI bars
             "reaches_curb": edges_hidden,
@@ -295,6 +316,7 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
 
         flooded_ps = [r["lane_covered"] for r in per_frame]
         edges_hiddens = [r["edges_hidden"] for r in per_frame]
+        lane_closeds = [r.get("lane_closed", 0.0) for r in per_frame]
         p_tires = [r["p_tire_or_worse"] for r in per_frame]
         depth_levels = [r["depth_level"] for r in per_frame]
         depth_scores = [r["depth_score"] for r in per_frame]
@@ -302,6 +324,7 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
 
         lane_covered = round(float(statistics.median(flooded_ps)), 4)
         edges_hidden = round(float(statistics.median(edges_hiddens)), 4)
+        lane_closed = round(float(statistics.median(lane_closeds)), 4)
         p_tire_or_worse = round(float(statistics.median(p_tires)), 4)
         depth_level = int(round(float(statistics.median(depth_levels))))
         depth_score = round(float(statistics.median(depth_scores)), 4)
@@ -310,6 +333,7 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
         rubric = {
             "lane_covered": lane_covered,
             "edges_hidden": edges_hidden,
+            "lane_closed": lane_closed,
             "p_tire_or_worse": p_tire_or_worse,
             "reaches_curb": edges_hidden,
             "sedan_stall": p_tire_or_worse,
@@ -329,9 +353,13 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
 
         agreement = round(_clamp01(1.0 - (max(flooded_ps) - min(flooded_ps))), 4)
 
-        if (lane_covered >= 0.6 and p_tire_or_worse >= 0.5) or (edges_hidden >= 0.6 and lane_covered >= 0.6):
+        if (
+            (lane_covered >= 0.6 and p_tire_or_worse >= 0.5)
+            or (edges_hidden >= 0.6 and lane_covered >= 0.6)
+            or lane_closed >= 0.7
+        ):
             action = "avoid"
-        elif lane_covered >= 0.5:
+        elif lane_covered >= 0.5 or lane_closed >= 0.45:
             action = "slow"
         else:
             action = "proceed"
@@ -339,6 +367,7 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
         return {
             "lane_covered": lane_covered,
             "edges_hidden": edges_hidden,
+            "lane_closed": lane_closed,
             "depth_level": depth_level,
             "p_tire_or_worse": p_tire_or_worse,
             "flooded_p": lane_covered,
