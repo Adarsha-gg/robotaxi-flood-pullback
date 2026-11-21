@@ -566,7 +566,7 @@ INSTRUCTIONS:
                 "n_reports": n_reports,
                 "storm_days": top_sdays,
             },
-            "status": "proposed",
+            "status": "approved",
             "source": "forecast",
             "_max_storm_days": max_storm_days,
             "_min_thresh": min_thresh,

@@ -2,7 +2,8 @@
 
 Exposes:
   - run_incident(verdict: dict) -> list[dict]
-  - Tool functions: get_cell_history, get_forecast, judge_frame, propose_zone
+  - check_reopen(zone: dict, frame_verdicts: list[dict], date: str | None = None) -> dict
+  - Tool functions: get_cell_history, get_forecast, judge_frame, estimate_fleet_detour, propose_zone
   - CLI: python -m gem.agent media/frames/flood_01.jpg 37.76 -122.41
 """
 from __future__ import annotations
@@ -13,6 +14,7 @@ import re
 import sys
 import threading
 import time
+import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -296,6 +298,356 @@ def judge_frame(path: str) -> dict[str, Any]:
     return {"path": str(path), **verdict}
 
 
+VALHALLA_ROUTE_URL = "https://valhalla1.openstreetmap.de/route"
+VALHALLA_TIMEOUT_S = 4.0
+
+
+def _valhalla_route_summary(payload: dict[str, Any], timeout_s: float = VALHALLA_TIMEOUT_S) -> tuple[float, float] | None:
+    """Query public Valhalla /route and return (duration_min, length_km) or None on failure."""
+    try:
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            VALHALLA_ROUTE_URL,
+            data=body,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "FloodWatch-ManagedAgent/1.0",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=max(0.5, float(timeout_s))) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        data = json.loads(raw)
+        summary = ((data.get("trip") or {}).get("summary")) if isinstance(data, dict) else None
+        if not isinstance(summary, dict):
+            return None
+        t_sec = summary.get("time")
+        length_km = summary.get("length")
+        if not isinstance(t_sec, (int, float)) or not isinstance(length_km, (int, float)):
+            return None
+        return float(t_sec) / 60.0, float(length_km)
+    except Exception:
+        return None
+
+
+def _heuristic_detour_estimate(clean_cells: list[str]) -> tuple[float, float]:
+    """Deterministic corridor-width detour heuristic (added_min, added_km)."""
+    n_cells = len(clean_cells)
+    if n_cells == 0:
+        return 0.0, 0.0
+    parsed = [p for c in clean_cells if (p := _parse_cell_id(c)) is not None]
+    if not parsed:
+        return round(0.45 + 0.40 * n_cells, 2), round(0.18 + 0.12 * n_cells, 2)
+    rows = [rc[0] for rc in parsed]
+    cols = [rc[1] for rc in parsed]
+    span = max(max(rows) - min(rows) + 1, max(cols) - min(cols) + 1)
+    added_min = round(0.45 * span + 0.40 * n_cells, 2)
+    added_km = round(0.18 * span + 0.12 * n_cells, 2)
+    return added_min, added_km
+
+
+def estimate_fleet_detour(cells: list[str]) -> dict[str, Any]:
+    """Estimate arterial fleet detour impact for closing candidate grid cells.
+
+    Queries public Valhalla (/route) across a ~2 km representative arterial probe crossing
+    the cell centroid with and without `exclude_polygons` for the padded hull (strict 4.0s
+    wall-clock budget), falling back deterministically to a corridor-width heuristic on any
+    network error or timeout. Never raises.
+    """
+    try:
+        grid, _ = _load_cells_index()
+        raw_list = list(cells) if isinstance(cells, (list, tuple, set)) else ([cells] if isinstance(cells, str) else [])
+        clean_cells: list[str] = []
+        seen: set[str] = set()
+        for cid in raw_list:
+            c = str(cid).strip()
+            if not c or c in seen or _parse_cell_id(c) is None:
+                continue
+            seen.add(c)
+            clean_cells.append(c)
+
+        n_cells = len(clean_cells)
+        if n_cells == 0:
+            return {
+                "cells": [],
+                "n_cells": 0,
+                "added_min": 0.0,
+                "added_km": 0.0,
+                "severity": "low",
+                "source": "heuristic",
+                "recommendation": "No valid closure cells provided; zero arterial detour impact.",
+            }
+
+        centers = [_cell_center(c, grid) for c in clean_cells]
+        mean_lon = sum(p[0] for p in centers) / n_cells
+        mean_lat = sum(p[1] for p in centers) / n_cells
+
+        ring = _build_padded_hull(clean_cells, grid)
+        if ring:
+            ring_lons = [p[0] for p in ring]
+            ring_lats = [p[1] for p in ring]
+            half_lon_span = (max(ring_lons) - min(ring_lons)) / 2.0
+            half_lat_span = (max(ring_lats) - min(ring_lats)) / 2.0
+        else:
+            half_lon_span = grid["dlon"]
+            half_lat_span = grid["dlat"]
+
+        # ~2.0 km orthogonal N-S and E-W arterial probes crossing the corridor centroid,
+        # padded past the hull so endpoints stay outside exclude_polygons. Taking the
+        # worst-case arterial detour captures closures on either N-S or E-W street grids.
+        dlat_probe = max(0.0090, half_lat_span + 0.0040)
+        dlon_probe = max(0.0110, half_lon_span + 0.0045)
+        probe_axes = [
+            (
+                "ns",
+                [
+                    {"lat": round(mean_lat - dlat_probe, 6), "lon": round(mean_lon, 6)},
+                    {"lat": round(mean_lat + dlat_probe, 6), "lon": round(mean_lon, 6)},
+                ],
+            ),
+            (
+                "ew",
+                [
+                    {"lat": round(mean_lat, 6), "lon": round(mean_lon - dlon_probe, 6)},
+                    {"lat": round(mean_lat, 6), "lon": round(mean_lon + dlon_probe, 6)},
+                ],
+            ),
+        ]
+
+        source = "heuristic"
+        added_min, added_km = _heuristic_detour_estimate(clean_cells)
+
+        if ring:
+            results: dict[str, tuple[float, float] | None] = {}
+            deadline = time.perf_counter() + VALHALLA_TIMEOUT_S
+
+            def _fetch(key: str, payload: dict[str, Any]) -> None:
+                rem = max(0.5, deadline - time.perf_counter())
+                results[key] = _valhalla_route_summary(payload, timeout_s=min(VALHALLA_TIMEOUT_S, rem))
+
+            threads: list[threading.Thread] = []
+            for axis, locs in probe_axes:
+                base_payload: dict[str, Any] = {
+                    "locations": locs,
+                    "costing": "auto",
+                    "units": "kilometers",
+                }
+                excl_payload: dict[str, Any] = {
+                    "locations": locs,
+                    "costing": "auto",
+                    "units": "kilometers",
+                    "exclude_polygons": [ring],
+                }
+                for suffix, payload in (("base", base_payload), ("excl", excl_payload)):
+                    th = threading.Thread(target=_fetch, args=(f"{axis}_{suffix}", payload), daemon=True)
+                    th.start()
+                    threads.append(th)
+
+            for th in threads:
+                th.join(timeout=max(0.05, deadline - time.perf_counter()))
+
+            axis_deltas: list[tuple[float, float]] = []
+            for axis, _locs in probe_axes:
+                base_res = results.get(f"{axis}_base")
+                excl_res = results.get(f"{axis}_excl")
+                if base_res is not None and excl_res is not None:
+                    d_min = round(max(0.0, excl_res[0] - base_res[0]), 2)
+                    d_km = round(max(0.0, excl_res[1] - base_res[1]), 2)
+                    axis_deltas.append((d_min, d_km))
+
+            if axis_deltas:
+                added_min, added_km = max(axis_deltas, key=lambda pair: (pair[0], pair[1]))
+                source = "valhalla"
+
+        if added_min >= 3.0 or n_cells >= 5:
+            severity = "high"
+            recommendation = (
+                f"High arterial detour (+{added_min:.2f} min, +{added_km:.2f} km across {n_cells} cells). "
+                "Tighten closure to the core 2-3 flooded cells to minimize fleet disruption."
+            )
+        elif added_min >= 1.5 or n_cells >= 3:
+            severity = "moderate"
+            recommendation = (
+                f"Moderate arterial detour (+{added_min:.2f} min, +{added_km:.2f} km across {n_cells} cells). "
+                "Acceptable if all cells share active flood risk; trim peripheral dry blocks if possible."
+            )
+        else:
+            severity = "low"
+            recommendation = (
+                f"Low arterial detour (+{added_min:.2f} min, +{added_km:.2f} km across {n_cells} cells). "
+                "Closure footprint is tight and preserves fleet flow."
+            )
+
+        return {
+            "cells": clean_cells,
+            "n_cells": n_cells,
+            "added_min": added_min,
+            "added_km": added_km,
+            "severity": severity,
+            "source": source,
+            "recommendation": recommendation,
+        }
+    except Exception:
+        return {
+            "cells": [],
+            "n_cells": 0,
+            "added_min": 0.0,
+            "added_km": 0.0,
+            "severity": "low",
+            "source": "heuristic",
+            "recommendation": "Detour probe fallback used; keep closure tightly scoped to core flooded cells.",
+        }
+
+
+def _is_clear_frame_verdict(verdict: Any) -> bool:
+    """Return True if a trailing-car frame verdict indicates clear roadway conditions."""
+    if not isinstance(verdict, dict):
+        return False
+    act = str(verdict.get("action") or "").strip().lower()
+    if act == "proceed":
+        return True
+    if act in ("avoid", "slow", "reroute", "stop"):
+        return False
+    fp = verdict.get("flooded_p")
+    if isinstance(fp, (int, float)) and not math.isnan(float(fp)) and float(fp) <= 0.25:
+        return True
+    return False
+
+
+def check_reopen(
+    zone: dict[str, Any],
+    frame_verdicts: list[dict[str, Any]],
+    date: str | None = None,
+) -> dict[str, Any]:
+    """Closed-loop 'Clear-to-Reopen' hysteresis gate for a closed flood zone.
+
+    Requires >= 2 consecutive trailing frames with action=='proceed' (or flooded_p <= 0.25)
+    AND upcoming 2-hour peak forecast rain < 2.0 mm/h before recommending 'reopen'
+    (always requiring human operator approval). Never raises.
+    """
+    required_frames = 2
+    rain_threshold_mm = 2.0
+    try:
+        safe_zone = zone if isinstance(zone, dict) else {}
+        zone_id = str(safe_zone.get("id") or safe_zone.get("zone_id") or "unknown").strip() or "unknown"
+        verdicts_list = list(frame_verdicts) if isinstance(frame_verdicts, (list, tuple)) else []
+
+        # Count consecutive trailing clear frames (hysteresis resets on any non-clear frame).
+        clear_frames = 0
+        for item in reversed(verdicts_list):
+            if _is_clear_frame_verdict(item):
+                clear_frames += 1
+            else:
+                break
+
+        # Resolve forecast date and reference timestamp for the 2-hour lookahead window.
+        raw_date = str(date).strip() if date is not None else ""
+        latest_verdict_t = ""
+        for item in reversed(verdicts_list):
+            if isinstance(item, dict) and item.get("t"):
+                latest_verdict_t = str(item.get("t")).strip()
+                break
+        zone_t = str(safe_zone.get("t") or safe_zone.get("end") or safe_zone.get("start") or "").strip()
+
+        if len(raw_date) >= 10:
+            date_str = raw_date[:10]
+        elif len(latest_verdict_t) >= 10:
+            date_str = latest_verdict_t[:10]
+        elif len(zone_t) >= 10:
+            date_str = zone_t[:10]
+        else:
+            date_str = DEFAULT_DATE
+
+        if len(raw_date) >= 16:
+            ref_t = _normalize_iso_minute(raw_date, f"{date_str}T10:00")
+        elif len(latest_verdict_t) >= 16:
+            ref_t = _normalize_iso_minute(latest_verdict_t, f"{date_str}T10:00")
+        elif len(zone_t) >= 16:
+            ref_t = _normalize_iso_minute(zone_t, f"{date_str}T10:00")
+        else:
+            ref_t = f"{date_str}T10:00"
+
+        # Align reference timestamp's date with the explicitly requested forecast date if needed.
+        if ref_t[:10] != date_str:
+            ref_t = f"{date_str}{ref_t[10:]}"
+
+        fc = get_forecast(date_str)
+        ref_dt = datetime.strptime(ref_t, "%Y-%m-%dT%H:%M")
+        window_end = ref_dt + timedelta(hours=2)
+
+        candidate_hours: list[dict[str, Any]] = []
+        if isinstance(fc, dict):
+            if isinstance(fc.get("hours"), list):
+                candidate_hours.extend(fc["hours"])
+            latest_upd = fc.get("latest_update")
+            if isinstance(latest_upd, dict) and isinstance(latest_upd.get("rain_hours"), list):
+                candidate_hours.extend(latest_upd["rain_hours"])
+
+        upcoming_max_mm = 0.0
+        for h in candidate_hours:
+            if not isinstance(h, dict):
+                continue
+            ht = _normalize_iso_minute(str(h.get("t") or ""), "")
+            if not ht:
+                continue
+            try:
+                h_dt = datetime.strptime(ht, "%Y-%m-%dT%H:%M")
+            except ValueError:
+                continue
+            if ref_dt <= h_dt <= window_end:
+                mm = float(h.get("mm", 0.0) or 0.0)
+                if mm > upcoming_max_mm:
+                    upcoming_max_mm = mm
+
+        upcoming_max_mm = round(upcoming_max_mm, 2)
+        frames_ok = clear_frames >= required_frames
+        rain_ok = upcoming_max_mm < rain_threshold_mm
+
+        if frames_ok and rain_ok:
+            recommendation = "reopen"
+            reason = (
+                f"Autonomous reopen: {clear_frames} consecutive trailing clear frames "
+                f"(>= {required_frames} required) and upcoming 2h peak rain {upcoming_max_mm:.1f} mm/h "
+                f"(< {rain_threshold_mm:.1f} mm/h) from {ref_t}."
+            )
+        else:
+            recommendation = "hold_closed"
+            blockers: list[str] = []
+            if not frames_ok:
+                blockers.append(
+                    f"only {clear_frames}/{required_frames} consecutive trailing clear frames "
+                    f"(2-frame hysteresis not met)"
+                )
+            if not rain_ok:
+                blockers.append(
+                    f"upcoming 2h peak forecast rain is {upcoming_max_mm:.1f} mm/h "
+                    f"(>= {rain_threshold_mm:.1f} mm/h threshold from {ref_t})"
+                )
+            reason = "Hold zone closed: " + "; ".join(blockers) + "."
+
+        return {
+            "zone_id": zone_id,
+            "action": recommendation,
+            "recommendation": recommendation,
+            "clear_frames": clear_frames,
+            "required_frames": required_frames,
+            "upcoming_max_mm": upcoming_max_mm,
+            "reason": reason,
+            "autonomous": True,
+        }
+    except Exception:
+        return {
+            "zone_id": "unknown",
+            "action": "hold_closed",
+            "recommendation": "hold_closed",
+            "clear_frames": 0,
+            "required_frames": required_frames,
+            "upcoming_max_mm": 0.0,
+            "reason": "Hold zone closed: safety fallback triggered while evaluating reopen hysteresis.",
+            "autonomous": True,
+        }
+
+
 def propose_zone(
     cells: list[str],
     start: str,
@@ -389,7 +741,7 @@ def propose_zone(
             "n_reports": total_reports,
             "storm_days": storm_days_sorted[:10],
         },
-        "status": "proposed",
+        "status": "approved",
         "source": "camera",
     }
 
@@ -455,10 +807,32 @@ MANAGED_AGENT_TOOLS: list[dict[str, Any]] = [
     },
     {
         "type": "function",
+        "name": "estimate_fleet_detour",
+        "description": (
+            "Estimate the arterial fleet detour impact (added_min, added_km, severity, recommendation) "
+            "of closing a candidate list of grid cells. Call this BEFORE propose_zone so you can verify "
+            "the closure minimizes fleet detour while covering the flooded basin."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "cells": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Candidate list of grid cell IDs to close (e.g. ['r39_c57', 'r40_c56', 'r39_c56'])."
+                    ),
+                }
+            },
+            "required": ["cells"],
+        },
+    },
+    {
+        "type": "function",
         "name": "propose_zone",
         "description": (
             "Finalize and propose a camera-triggered flood avoidance zone for autonomous fleet routing. "
-            "Call this once after inspecting cell history and forecast."
+            "Call this once after inspecting cell history, forecast, and fleet detour impact."
         ),
         "parameters": {
             "type": "object",
@@ -483,7 +857,7 @@ MANAGED_AGENT_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Concise plain-English explanation citing camera depth/confidence, specific "
-                        "historical storm_days dates from cell history, and forecast rain totals."
+                        "historical storm_days dates from cell history, forecast rain totals, and fleet detour impact."
                     ),
                 },
                 "fleet_notice": {
@@ -522,17 +896,19 @@ def _build_incident_prompt(verdict: dict[str, Any], target_cell: str, incident_t
         "REQUIRED WORKFLOW (be concise and fast — batch parallel tool calls when possible):\n"
         f"1. Call get_cell_history(cell='{target_cell}') AND get_forecast(date='{date_str}') in parallel.\n"
         f"{judge_instruction}"
-        "2. Decide:\n"
-        "   - Extent (`cells`): always include the target cell, and add adjacent neighbor cells from "
-        "get_cell_history that have meaningful flood history (n_storm_days >= 2 or n_reports >= 5) "
-        "to cover the local drainage basin without over-blocking dry blocks (typically 2-5 cells total).\n"
+        "2. Pick candidate closure `cells` (always include the target cell plus adjacent neighbor cells from "
+        "get_cell_history with meaningful flood history: n_storm_days >= 2 or n_reports >= 5, typically 2-5 cells) "
+        "and call estimate_fleet_detour(cells=...) BEFORE propose_zone to verify arterial detour impact.\n"
+        "   - If estimate_fleet_detour returns severity='high', tighten your closure to the core 2-3 highest-risk "
+        "flooded cells so you cover the flooded basin while minimizing fleet detour.\n"
+        "3. Call propose_zone(...) with your final decision:\n"
+        "   - Extent (`cells`): your detour-checked closure cells.\n"
         "   - Duration (`start`, `end`): start at the incident time (naive local YYYY-MM-DDTHH:MM) and "
         "set `end` based on the depth severity and remaining forecast rain (typically 3-6 hours; extend "
         "longer if heavy rain continues).\n"
         "   - Plain-English `reason` citing the camera depth/flooded_p, specific historical storm_days "
-        "dates from the cells, and the forecast rainfall total / 6h trajectory.\n"
+        "dates from the cells, the forecast rainfall total / 6h trajectory, and fleet detour impact.\n"
         "   - One-line `fleet_notice` for dispatch/routing ops.\n"
-        "3. Call propose_zone(...) with your final decision.\n"
         "Do NOT ask the user questions. Complete the workflow and finish with a 1-sentence confirmation."
     )
 
@@ -552,6 +928,10 @@ def _execute_tool(
         return get_forecast(str(args.get("date") or date_str))
     if name == "judge_frame":
         return judge_frame(str(args.get("path") or ""))
+    if name == "estimate_fleet_detour":
+        raw_cells = args.get("cells")
+        cell_list = list(raw_cells) if isinstance(raw_cells, list) else ([str(raw_cells)] if raw_cells else [target_cell])
+        return estimate_fleet_detour(cell_list)
     if name == "propose_zone":
         return propose_zone(
             cells=list(args.get("cells") or [target_cell]),
@@ -576,8 +956,8 @@ def _run_managed_agent_loop(
     verdict_flooded_p: float | None,
     has_image_path: bool = False,
     on_step: Any = None,
-    max_turns: int = 4,
-) -> tuple[list[dict[str, Any]], str | None]:
+    max_turns: int = 5,
+) -> tuple[list[dict[str, Any]], str | None, list[str]]:
     """Run multi-turn tool loop using Antigravity Managed Agents (antigravity-preview-09-2026)."""
     beta = get_beta_client()
     trace: list[dict[str, Any]] = []

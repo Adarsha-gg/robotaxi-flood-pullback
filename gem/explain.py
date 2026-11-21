@@ -541,6 +541,104 @@ def explain_decision(
     return _build_template(ctx, latency_ms=elapsed_ms)
 
 
+class AutonomousDecisionDraft(BaseModel):
+    action: str = Field(description='Autonomous driving decision: strictly "reroute" or "keep_route".')
+    confidence: float = Field(description="Calibrated confidence between 0.0 and 1.0.")
+    headline: str = Field(description="Short decision headline, strictly <= 90 characters.")
+    reasons: list[str] = Field(description="2 to 3 crisp, grounded reasons citing exact numbers from the context.")
+    rider_message: str = Field(description="Calm, plain-language rider message, strictly <= 140 characters, no jargon.")
+
+
+def _fallback_decide(ctx: dict[str, Any], latency_ms: int) -> dict[str, Any]:
+    """Deterministic safety-first autonomous fallback if Carbon times out or fails."""
+    verdict = ctx.get("verdict") if isinstance(ctx.get("verdict"), dict) else {}
+    v_act = str(verdict.get("action") or "").lower()
+    lane_p = _safe_float(verdict.get("lane_covered", verdict.get("flooded_p")), 0.0)
+    p_tire = _safe_float(verdict.get("p_tire_or_worse"), 0.0)
+    has_risky = bool(ctx.get("fastest_route", {}).get("street_flood_blocks_on_it"))
+    should_reroute = (
+        v_act in ("avoid", "slow")
+        or lane_p >= 0.55
+        or p_tire >= 0.45
+        or (not verdict and has_risky)
+    )
+    action = "reroute" if should_reroute else "keep_route"
+    return {
+        "action": action,
+        "confidence": round(max(0.75, lane_p) if should_reroute else max(0.75, 1.0 - lane_p), 2),
+        "headline": "Autonomously rerouting around flooded blocks ahead" if should_reroute else "Continuing on current route: road clear for travel",
+        "reasons": [
+            "Autonomous safety policy prioritizes avoiding standing roadway water over minor travel-time savings.",
+            f"Simulated/assessed roadway flood signal: action={v_act or 'pre_trip'}, lane_covered={lane_p:.2f}.",
+        ],
+        "rider_message": (
+            "Taking a slightly different route to stay clear of heavy rain and street water ahead."
+            if should_reroute
+            else "Continuing along your current route; road conditions ahead look clear."
+        ),
+        "model": "template",
+        "latency_ms": latency_ms,
+    }
+
+
+def decide(ctx: dict[str, Any], timeout_s: float = 8.0) -> dict[str, Any]:
+    """Hardened autonomous Gemini 4 Carbon decision (drop-in upgrade for pipeline.ride.decide).
+
+    Returns {"action": "reroute"|"keep_route", "confidence": float, "headline": str,
+             "reasons": list[str], "rider_message": str, "model": str, "latency_ms": int}.
+    Enforces timeout_s and never raises.
+    """
+    t0 = time.perf_counter()
+    safe_ctx = ctx if isinstance(ctx, dict) else {}
+    prompt = (
+        "You are the autonomous driving policy of a robotaxi in San Francisco. Decide NOW, with no human in the loop, "
+        "whether to reroute around the street ahead ('reroute') or keep the current route ('keep_route'). "
+        "Rider safety and not getting stranded in water outrank a few minutes of travel time. "
+        "Use ONLY the numbers and dates in the JSON below; never invent dates or rainfall figures. "
+        "Refer to Genie 4 frames as 'simulated', never 'observed'.\n\n"
+        + json.dumps(safe_ctx, indent=1)
+    )
+
+    def _call() -> AutonomousDecisionDraft:
+        client = get_client()
+        resp = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=AutonomousDecisionDraft,
+                thinking_config=types.ThinkingConfig(thinking_level="LOW"),
+            ),
+        )
+        return AutonomousDecisionDraft.model_validate_json(resp.text)
+
+    try:
+        pool = ThreadPoolExecutor(max_workers=1)
+        fut = pool.submit(_call)
+        try:
+            draft = fut.result(timeout=max(0.5, float(timeout_s)))
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+        act = draft.action.strip().lower()
+        if act not in ("reroute", "keep_route"):
+            act = "reroute" if "reroute" in act or "avoid" in act else "keep_route"
+        conf = max(0.0, min(1.0, float(draft.confidence)))
+        reasons = [" ".join(str(r).split()) for r in (draft.reasons or []) if str(r).strip()][:3]
+        if not reasons:
+            reasons = ["Autonomous Carbon policy evaluated forecast, street flood history, and simulated conditions."]
+        return {
+            "action": act,
+            "confidence": round(conf, 3),
+            "headline": _truncate(draft.headline, HEADLINE_MAX),
+            "reasons": reasons,
+            "rider_message": _truncate(draft.rider_message, RIDER_MAX),
+            "model": MODEL_NAME,
+            "latency_ms": int((time.perf_counter() - t0) * 1000),
+        }
+    except Exception:
+        return _fallback_decide(safe_ctx, latency_ms=int((time.perf_counter() - t0) * 1000))
+
+
 def _sample_sim_for_cli(plan: dict[str, Any]) -> dict[str, Any]:
     """Load cached Genie sim result if present, else synthesize a realistic verdict for CLI tests."""
     cell = ((plan.get("watch") or {}).get("cell")) or "r50_c66"
