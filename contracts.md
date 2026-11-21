@@ -19,12 +19,15 @@ Plain lat/lon grid, about 165 m cells. Cell id `r{row}_c{col}`.
 ## Data files (Lane C writes, Lane G reads)
 
 ```jsonc
-// data/cells.json
+// data/cells.json   (history strictly BEFORE history_before, so the Nov 18 replay can't peek)
 {"grid":{"lat0":37.70,"lon0":-122.52,"dlat":0.0015,"dlon":0.0019},
+ "history_before":"2026-11-18","storm_days":["2025-12-26","..."],
  "cells":[{"id":"r41_c57","lat":37.7615,"lon":-122.4108,"n_reports":212,"n_storm_days":9,
    "storm_days":["2022-12-31","2019-12-07"],"thresh_mm_6h":14.0,"top_addresses":["..."]}]}
 
-// data/forecast_<date>.json   (source: previous_day1 | latest | live)
+// data/forecast_<date>.json          (source: previous_day1 = night-before run; the default for zones)
+// data/forecast_<date>_latest.json   (source: latest; caught the real 9-10 AM peak on Nov 18)
+// live mode: data/forecast_<date>.json with source: live
 {"date":"2026-11-18","source":"previous_day1","total_mm":59.3,
  "hours":[{"t":"2026-11-18T06:00","mm":5.4}]}
 
