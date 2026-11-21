@@ -31,7 +31,7 @@
   <aside>
     <div class="tripcard">
       <div class="tc-top"><span>W-112 · ROBOTAXI</span><span class="r"><span id="state" class="pillst">ready</span><button id="pauseBtn" title="Pause (Space)" onclick="togglePause()">⏸</button></span></div>
-      <div class="tc-clock"><div class="clock" id="clock">09:50</div><div id="eta"><b>Nov 18, 2026</b>Replay of a real storm morning</div></div>
+      <div class="tc-clock"><div class="clock" id="clock">10:00</div><div id="eta"><b>Nov 18, 2026</b>Replay of a real storm morning</div></div>
       <div class="tc-route" id="tripName">Inner Richmond → Caltrain</div>
       <div class="tc-bar"><div id="prog"></div></div>
     </div>
@@ -45,7 +45,7 @@
 </div>
 <script src="/web/app.js"></script>
 <script>
-const FROM = [37.7800, -122.4650], TO = [37.7765, -122.3946], T0 = '2026-11-18T09:50';
+const FROM = [37.7800, -122.4650], TO = [37.7765, -122.3946], T0 = '2026-11-18T10:00';
 const MIN_MS = 1300;
 let running = false, runId = 0, carM, SPEED = 1, clockM = 0;
 let T_START = toMin(T0), T_END = T_START + 13;
@@ -61,8 +61,9 @@ PREFETCH.then(P => { if (!P || P.error || running) return;
 // the "dumb" car: same pickup, same minute, but it only follows the fastest route, and stops at the first street
 // already reported flooded to 311 (real report, filed before it gets there)
 let GHOST = null;
-function ghostStart(P) {
+function ghostStart(P, PW) {
   const F = P.fast, tm = F.times.map(toMin);
+  if (PW) P = {...P, live_a: [{lat: PW.lat, lon: PW.lon, name: PW.name, last: PW.photo.t}]};
   const hits = (P.live_a || []).map(x => ({x, i: F.coords.reduce((bi, c, k) => (Math.hypot(c[0] - x.lat, c[1] - x.lon) < Math.hypot(F.coords[bi][0] - x.lat, F.coords[bi][1] - x.lon) ? k : bi), 0)}))
     .filter(h => toMin(h.x.last) <= tm[h.i]).sort((a, b) => a.i - b.i);
   const stop = hits[0];
@@ -104,14 +105,14 @@ async function start() {
   const myId = ++runId; const alive = () => running && runId === myId;
   running = true; SPEED = 1; GHOST = null; $('feed').innerHTML = ''; Object.values(lay).forEach(l => l.clearLayers());
   // 1. before pickup
-  initSteps([['Live reports', 'What 311 already knows'], ['Route', 'Pick a route before pickup'], ['Forecast', 'Re-check while driving'], ['Simulate', 'Genie 4 · the street ahead'], ['Decide', 'Gemini 4 Carbon · no human'], ['Fleet agent', 'Antigravity Managed Agent']]);
+  initSteps([['Live reports', 'What 311 already knows'], ['Check the fastest route', 'Genie 4 · its worst spot'], ['Pick the route', 'Gemini 4 Carbon · no human'], ['Re-check ahead', 'New forecast · Genie 4 again'], ['Decide', 'Gemini 4 Carbon · no human'], ['Fleet agent', 'Antigravity Managed Agent']]);
   step(0, 'active'); progress(0);
-  card('Before pickup · 09:50', 'Checking the fastest route…', 'Live 311 flood reports, the forecast, and every street that has flooded before.');
+  card('Before pickup · 10:00', 'Checking the fastest route…', 'Live 311 flood reports, the forecast, and every street that has flooded before.');
   state('checking route');
   let P = PREFETCH ? await PREFETCH : null; PREFETCH = null;
   if (!P || P.error) P = await post('/api/ride/plan', {from: FROM, to: TO, t: T0});
   if (P.error) { card('Could not plan', esc(P.error)); running = false; return; }
-  const fast = P.fast, A = P.route_a, D1 = P.pre_decision;
+  const fast = P.fast, PW = P.pre_watch; let A = P.route_a, D1 = null;
   fastLine(fast.coords);
   map.fitBounds(L.latLngBounds(fast.coords), PAD);
   say(`Fastest route: ${Math.round(fast.min)} min`);
@@ -126,31 +127,61 @@ async function start() {
   await sleep(2600);
   if (!alive()) return;
   collapse(`<b>Live</b> · ${P.live.length} street floods reported so far`);
-  step(1, 'active', 'Checking the fastest route');
+  step(1, 'active', 'Scanning the fastest route');
   step(0, 'done', `${P.live.length} street floods filed so far`);
   P.live_a.forEach(x => pulseAt(x));
   P.risky_a.forEach(r => waterPin(r, false));
   const nl = P.live_a.length, nm = P.risky_a.length;
-  say(`On the fastest route: ${nl} live flood report${nl === 1 ? '' : 's'} and ${nm} streets that flood in storms`);
-  card('On the fastest route', `${nl} live reports · ${nm} flood-prone streets`,
-    `${P.live_a.map(x => esc(title(x.name).replace(/^Intersection /, ''))).join(', ')}. Plus ${P.risky_a.map(r => esc(title(r.name))).join(', ')}, which flooded in ${P.risky_a.length ? Math.min(...P.risky_a.map(r => r.n_storm_days)) : 0}+ past storms.`);
-  await sleep(3200);
-  if (!alive()) return;
+  let pre = null;
+  if (PW) {
+    // the worst spot on the fastest route, with a real photo from 311
+    const pwName = title(PW.name);
+    pulse(PW.lat, PW.lon, pwName);
+    map.flyTo([PW.lat, PW.lon], 15, {duration: 1.1});
+    say(`On the fastest route: water across ${pwName} (311 photo, ${hm(PW.photo.t)})`);
+    const xp = card('On the fastest route', `${esc(pwName)} is flooding`, `A resident sent this to 311 at ${hm(PW.photo.t)}. ${PW.live_near.length} more flood reports within 300 m. The fastest route reaches it at ${hm(PW.eta)}.`);
+    xp.innerHTML = `<div class="cams one"><div><img src="/${PW.photo.path}"><div class="c"><span>${esc(title(PW.photo.address))} · real 311 photo</span><span>${hm(PW.photo.t)}</span></div></div></div>`;
+    await sleep(3400);
+    if (!alive()) return;
+    // Genie 4 plays the forecast forward to the minute the car would get there
+    step(1, 'active', `Genie 4 · ${esc(pwName)} at ${hm(PW.eta)}`);
+    card('Simulating with Genie 4', `${esc(pwName)} at ${hm(PW.eta)}`, 'Built from the real photo. Checked the way a car would.');
+    const FA = PW.forecast_at_eta || {};
+    stageOpen(pwName, hm(PW.eta), '/' + PW.photo.path, `Real 311 photo · ${title(PW.photo.address)} · ${hm(PW.photo.t)}`,
+      `Forecast when the car gets there (${hm(PW.eta)}): ${FA.mm} mm of rain that hour · ${FA.six_h_mm} mm in 6 h`);
+    let pdone = false; const psP = post('/api/ride/presim'); psP.then(() => { pdone = true; });
+    waitGenieLive(() => pdone || !alive());
+    pre = await psP; pdone = true;
+    if (!alive()) { stageClose(); return; }
+    const PDp = post('/api/ride/predecide');   // Carbon starts while the result is on screen
+    if (!pre.error) { stageResult(pre.frame, hm(PW.eta), pre.verdict, pre.total_s); await sleep(3800); }
+    await stageClose();
+    step(1, 'done', esc(pre.verdict?.depth_label || 'simulated'));
+    step(2, 'active', 'Gemini 4 Carbon is deciding…');
+    say('Gemini 4 Carbon is deciding…');
+    const PD = await PDp;
+    if (!alive()) return;
+    if (!PD.error) { D1 = PD.decision; A = PD.route_a; }
+  }
   legend('lgRoute');
+  map.flyToBounds(L.latLngBounds(fast.coords), {...PAD, duration: .8});
   const aLine = await drawLine(lay.route, A.coords, {color: '#2fd18b', weight: 7, opacity: .95}, 1100);
   const dA = A.min - fast.min; T_END = toMin(A.times.at(-1));
-  etaLine(`<b>ETA ${hm(A.times.at(-1))}</b>${A.min.toFixed(1)} min · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} vs fastest`);
-  const x1 = card('Before pickup · decision · no human', D1 ? esc(D1.headline) : 'Flood-aware route', `${D1 ? actPill(D1.action) : ''}<span class="pill p-info">${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min</span>`);
-  if (D1) x1.innerHTML = why(D1);
-  say(`Carbon picked a route around them · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
-  await sleep(3600);
+  const tookAlt = D1 && D1.action === 'reroute';
+  if (!tookAlt) { lay.fast.clearLayers(); const lf = $('lgFast'); if (lf) lf.classList.remove('show'); }
+  etaLine(`<b>ETA ${hm(A.times.at(-1))}</b>${A.min.toFixed(1)} min · ${tookAlt ? `${dA >= 0 ? '+' : ''}${dA.toFixed(1)} vs fastest` : 'fastest route'}`);
+  const x1 = card('Before pickup · decision · no human', D1 ? esc(D1.headline) : 'Fastest route', `${D1 ? actPill(D1.action) : ''}<span class="pill p-info">${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min</span>`);
+  if (D1) { x1.innerHTML = why(D1); riderVoice(D1.rider_message); }
+  say(tookAlt ? `Carbon rerouted before pickup · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min` : 'Carbon kept the fastest route');
+  step(2, 'done', D1 ? esc(D1.headline) : 'Fastest route');
+  await sleep(3800);
   if (!alive()) return;
-  step(1, 'done', `Avoids ${nl} live floods + ${nm} flood-prone streets`); step(2, 'active', 'Re-checking every minute');
-  collapse(`<b>Route chosen</b> · avoids ${nl} live floods + ${nm} flood-prone streets · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
+  step(3, 'active', 'Re-checking the forecast every minute');
+  collapse(`<b>Route chosen</b> · ${tookAlt ? 'around ' + esc(PW ? title(PW.name) : 'the flooding') : 'fastest'}`);
 
   // 2. drive; mid-ride check prepared in the background
   state('driving'); say('Driving · re-checking the forecast every minute');
-  ghostStart(P);
+  ghostStart(P, PW);
   const C = await post('/api/ride/check');
   if (C.error) { card('Check failed', esc(C.error)); running = false; return; }
   await drive(A, 0, C.at_index, ghostTick, null, myId);
@@ -164,7 +195,7 @@ async function start() {
   let done = false, sim = null;
   const simP = W ? post('/api/ride/simulate') : Promise.resolve(null);
   simP.then(s => { sim = s; done = true; });
-  step(2, 'done', `${C.peak.mm} mm/h in the next hour`);
+  step(3, 'active', `${C.peak.mm} mm/h in the next hour`);
   SPEED = 0.35; state('slowing · simulating', true);
   const capIdx = W ? Math.max(C.at_index + 1, (W.route_index || A.coords.length) - 3) : A.coords.length - 1;   // stop short of the street being simulated
   const midDrive = drive(A, C.at_index, capIdx, ghostTick, () => done, myId);
@@ -182,7 +213,7 @@ async function start() {
       `Water on this street in <b style="color:var(--text)">${W.n_storm_days} past storms</b>${nlv ? `, and <b style="color:var(--text)">${nlv} flood reports within 500 m</b> this morning` : ''}${nc ? `, plus <b style="color:var(--text)">${nc} lane closures</b>` : ''}.`);
     await sleep(2600);
     const arr = hm(W.eta);
-    step(3, 'active', `${esc(title(W.name))} at ${hm(W.eta)}`);
+    step(3, 'active', `Genie 4 · ${esc(title(W.name))} at ${hm(W.eta)}`);
     card('Simulating with Genie 4', `What ${esc(title(W.name))} looks like at ${arr}`, 'Built from the clearest real photo nearby. Checked the way a car would.');
     const FA = W.forecast_at_eta || {};
     stageOpen(title(W.name), arr, '/' + W.photo.path, `Real photo · ${title(W.photo.address)} · ${hm(W.photo.t)} · ${W.photo.dist_m} m away`,

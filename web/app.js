@@ -30,7 +30,7 @@ document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TE
 const hm = t => String(t || '').slice(11, 16);
 const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
 const fmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
-const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/,? \d{5}$/, '').replace(/^Intersection (Of )?/i, '').replace(/, Virtual$/i, '');
+const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/,? \d{5}$/, '').replace(/^Intersection (Of )?([^,]+), /i, '$2 & ').replace(/^Intersection (Of )?/i, '').replace(/, Virtual$/i, '');
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const pct = v => Math.round((v || 0) * 100) + '%';
 const PAD = {paddingTopLeft: [40, 100], paddingBottomRight: [40, 120]};

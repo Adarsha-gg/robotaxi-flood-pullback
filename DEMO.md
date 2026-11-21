@@ -1,6 +1,6 @@
 # Demo: 3 minutes, 2 pages
 
-Start the server first: `.venv/bin/python server.py`. Open http://localhost:8000 (the Replay) in one tab and http://localhost:8000/trip in a second tab. Press Start once before going on stage to warm the cache, then reload.
+Start the server first: `.venv/bin/python server.py`. Open http://localhost:8000 (the Replay) in one tab and http://localhost:8000/trip in a second tab. Press Start once before going on stage to warm the cache, then reload. Space pauses the ride if a judge asks a question; click any finished step to replay it.
 
 The numbers below are what the app shows every run (checked twice on 2026-11-21).
 
@@ -10,35 +10,35 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 **Say:** "Three days ago, on November 18, San Francisco had its worst street-flooding day on record: 778 reports to 311. At 11 AM Waymo paused the whole city because robotaxis drove into flooded streets. They only react after a car is stuck. We built the part that looks ahead."
 
-## 0:20 – 0:50 · Before pickup: it is already flooding (press ▶ Start ride)
+## 0:20 – 0:45 · Before pickup: it is already flooding (press ▶ Start ride)
 
-**Screen:** 09:50. Red dots fill the map: 77 real 311 street-flood reports so far. Three real resident photos appear in the panel (199 Jones St, 204 Park Presidio, 3411 20th St). The fastest route draws, then the green flood-aware route.
+**Screen:** 10:00. Red dots fill the map: 122 real 311 street-flood reports so far, with real resident photos (a Waymo on 2nd St at 09:49). The fastest route draws as a red dotted line.
 
-**Say:** "9:50 AM. 77 streets have already been reported flooded to 311 this morning. These are the real photos residents sent. Three of those reports sit right on the fastest route, and three more streets on it, Laguna and Oak, Fell and Masonic, Ashbury and Fell, have flooded in 14 to 16 past storms. Gemini 4 Carbon routes around all six. It's even 0.4 minutes faster."
+**Say:** "10 AM. 122 streets have already been reported flooded to 311 this morning. The car checks the fastest route before pickup."
 
-## 0:50 – 1:10 · Mid-ride, the forecast changes
+## 0:45 – 1:15 · Simulate the fastest route's worst spot
 
-**Screen:** caption "New forecast: 8.6 mm of rain in the next hour", new red dots pop in. Pulse at Franklin & Geary.
+**Screen:** 1777 Oak St, a resident's photo from 09:57: water running across Oak St, a barricade knocked over. Genie 4 plays the forecast forward to 10:03, when the car would get there: AVOID, water over the tire sidewall.
 
-**Say:** "Three minutes in, a newer forecast lands, and 14 new reports come in. Ahead is Franklin and Geary. It has flooded in 20 past storms, and two reports came in within 500 meters this morning."
+**Say:** "Right on the fastest route, Oak Street. A resident sent this photo three minutes ago. Genie 4 builds the street from it and plays the forecast forward to the minute the car would arrive: 7 millimeters that hour. Decision 1 checks it the way a car would: water over the tire sidewall. Oak Street is where a Waymo blocked traffic that morning."
 
-## 1:10 – 1:40 · Simulate the street (Genie 4 + Decision 1)
+## 1:15 – 1:35 · Carbon picks the route, no human
 
-**Screen:** Genie 4 fills the screen, built from the 199 Jones St photo (inset, 09:10). Then the meters.
+**Screen:** REROUTE card, green route draws around Oak St. A second robotaxi (dark, red ring) takes the fastest route.
 
-**Say:** "The car can't see that street yet. So Genie 4 builds it from the clearest real photo nearby, sent to 311 at 9:10, and plays it forward to the minute the car arrives. Decision 1 asks car questions: is water across the travel lane, does it reach the tire sidewall, are the lane edges hidden."
+**Say:** "Gemini 4 Carbon decides on its own: take the route around it. It's even 0.4 minutes faster. Watch the other robotaxi, the one that only follows the fastest route."
 
-## 1:40 – 2:05 · The decision, with no human
+## 1:35 – 2:05 · Mid-ride: check again, don't overreact
 
-**Screen:** REROUTE card with two reasons and the rider message. The car never stops.
+**Screen:** New forecast, Franklin & Geary ahead. Genie again from the clearest nearby photo: puddles below the tire tread. Carbon keeps the route. The fastest-route robotaxi shows STUCK at 1777 Oak St. The fleet agent (Antigravity Managed Agent) calls its tools and draws a purple avoid zone.
 
-**Say:** "No human approves anything. Carbon starts deciding the moment the simulation is judged, reads the live reports, history, forecast and simulation, and reroutes. It tells the rider why. The car never stopped."
+**Say:** "Three minutes in, a new forecast. The car simulates the next street too: puddles. So it keeps going. It doesn't cry wolf. Meanwhile the other robotaxi is stuck on Oak Street. And our fleet agent, an Antigravity Managed Agent, takes what this car saw and pulls the whole fleet off Franklin for the next four hours."
 
 ## 2:05 – 2:30 · Did it work?
 
-**Screen:** clock runs to 11:50; counter 35 vs 16 (real 311 reports in the next 2 hours); caption "11:00 Waymo paused all San Francisco service".
+**Screen:** counter 30 vs 9 (real 311 reports in the next 2 hours), "11:00 Waymo paused all San Francisco service".
 
-**Say:** "And the check: in the next two hours, 35 floods were reported on the fastest route, 16 on ours. At 11, Waymo paused the city. Across 15 past storms, the same flood memory caught 45% of flooded blocks while covering 8% of the city."
+**Say:** "In the next two hours: 30 floods on the fastest route, 9 on ours. At 11, Waymo paused the city."
 
 ## 2:30 – 3:00 · It works today (switch to the Plan a trip tab)
 
@@ -50,7 +50,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 ## If something breaks
 
-- **Genie slow or down:** the simulation falls back to a real cached Genie run of Franklin and Geary. Nothing to say.
+- **Genie slow or down:** the simulations fall back to real cached Genie runs of 1777 Oak St and Franklin & Geary. Nothing to say.
 - **Carbon slow:** after 8 seconds a rule-based fallback decides, with the same card. Nothing to say.
 - **Wi-Fi dies:** play the backup screen recording. Record one full Replay run before the demo.
 - **A Plan-a-trip address isn't found:** use "Noe Valley" → "Chase Center".

@@ -213,8 +213,11 @@ async function go() {
         const here = fast.coords[idx];
         const DP = post('/api/trip/decide', {here, t: fast.times[idx], index: idx});
         const v0 = S.verdict || {};
-        fleetAgent(5, {cell: T.cell, lat: T.lat, lon: T.lon, t: fast.times[idx].slice(0, 16), date: fast.times[idx].slice(0, 10),
-          flooded_p: v0.lane_covered, depth_label: v0.depth_label, source: 'genie4_simulation'}, alive);
+        // the fleet agent only works a spot when there is something to warn about: water in the sim or rain still coming
+        if (v0.action !== 'proceed' || P.six_h_mm >= 3)
+          fleetAgent(5, {cell: T.cell, lat: T.lat, lon: T.lon, t: fast.times[idx].slice(0, 16), date: fast.times[idx].slice(0, 10),
+            flooded_p: v0.lane_covered, depth_label: v0.depth_label, source: 'genie4_simulation'}, alive);
+        else step(5, 'done', 'Not needed · street passable, little rain ahead');
         if (S.seed_path && !sc && !sp) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
         stageResult(S.frame, hm(S.eta), S.verdict, S.total_s);
         await sleep(3600);
@@ -231,7 +234,7 @@ async function go() {
           const x7 = card('Decision · no human', esc(D.headline), `${actPill(D.action)}<span class="pill p-info">ETA ${hm(R.times.at(-1))} (${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min)</span>`);
           x7.innerHTML = why(D); riderVoice(D.rider_message);
           step(4, 'done', esc(D.headline));
-          etaLine(`<b>ETA ${hm(R.times.at(-1))}</b>${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min vs fastest`);
+          etaLine(D.action === 'reroute' ? `<b>ETA ${hm(R.times.at(-1))}</b>${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min vs fastest` : `<b>ETA ${hm(R.times.at(-1))}</b>Fastest route · kept`);
           say(D.action === 'reroute' ? `Rerouted around ${title(T.name)}. The car never stopped.` : `Keeping the route: ${D.headline}`);
           if (D.action === 'reroute') {
             const t2 = L.polyline([R.coords[0]], {color: '#2fd18b', weight: 7, opacity: .95}).addTo(lay.route);
@@ -245,6 +248,8 @@ async function go() {
     }
     if (!alive()) return;
     if (!D || D.action !== 'reroute') {
+      // the car is on the fastest route: drop the "not taken" dotted line and its label
+      lay.fast.clearLayers(); const lf = $('lgFast'); if (lf) lf.classList.remove('show');
       if (!T) say('Nothing flagged ahead · driving the fastest route');
       state('driving');
       map.flyToBounds(L.latLngBounds(fast.coords), {...PAD, duration: 1});
@@ -258,9 +263,9 @@ async function go() {
     card('Trip error', esc(err.message || String(err))); state('error');
   } finally {
     if (alive()) {
-      running = false; $('form').style.display = '';
+      running = false;   // the form stays hidden so the finished trip fits the screen; "New trip" brings it back
       $('feed').insertAdjacentHTML('beforeend', '<button class="btn wide" id="again">▶ New trip</button>');
-      $('again').onclick = go;
+      $('again').onclick = () => { $('again').remove(); $('form').style.display = ''; $('from').focus(); };
     }
   }
 }

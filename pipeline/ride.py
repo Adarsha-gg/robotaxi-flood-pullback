@@ -90,7 +90,9 @@ def _strip(r):
 
 
 # the clearest real street photos sent to 311 that morning (landscape road views Genie can build from)
-LIVE_PHOTOS = ("199 JONES ST", "204 PARK PRESIDIO BLVD", "3411 20TH ST", "1200 26TH AVE")
+LIVE_PHOTOS = ("691 2ND ST", "199 JONES ST", "3411 20TH ST", "204 PARK PRESIDIO BLVD", "1200 26TH AVE")
+# real resident photos of water ON the fastest route, best first (1777 Oak St 09:57: water running across Oak St)
+PRE_PHOTOS = ("1777 OAK ST", "1672 OAK ST", "400 ASHBURY ST")
 
 
 def live_reports(date, t, since="07:00"):
@@ -115,7 +117,25 @@ def _live_on(route, live, m=120):
              "last": max(x["t"] for x in es)} for c, es in by.items()]
 
 
-def plan(frm, to, t="2026-11-18T09:50", date="2026-11-18"):
+def _pre_watch(fast, cells, live, date, t):
+    """The worst spot on the fastest route that has a real flood photo filed before t (no hindsight)."""
+    ph = {p["address"].upper().replace(", VIRTUAL", ""): p for p in (_j(f"photos_{date}.json") or [])}
+    cands = [ph[a] for a in PRE_PHOTOS if a in ph and ph[a]["t"] <= t]
+    for p in cands:
+        k = min(range(len(fast["coords"])), key=lambda i: _dist_m(fast["coords"][i], (p["lat"], p["lon"])))
+        d = _dist_m(fast["coords"][k], (p["lat"], p["lon"]))
+        if d > 150:
+            continue
+        cell = R._cell(p["lat"], p["lon"])
+        near = [e for e in live if _dist_m((e["lat"], e["lon"]), (p["lat"], p["lon"])) <= 300]
+        return {"cell": cell, "lat": p["lat"], "lon": p["lon"], "name": p["address"].replace(", Virtual", ""),
+                "eta": fast["times"][k], "route_index": k, "n_storm_days": (cells.get(cell) or {}).get("n_storm_days", 0),
+                "live_near": [{k2: e[k2] for k2 in ("t", "lat", "lon", "address")} for e in near],
+                "photo": {**{k2: p[k2] for k2 in ("t", "address", "lat", "lon", "path")}, "dist_m": round(d)}}
+    return None
+
+
+def plan(frm, to, t="2026-11-18T10:00", date="2026-11-18"):
     cells = {c["id"]: c for c in (_j("cells_street.json") or _j("cells.json"))["cells"]}
     fc_night = _j(f"forecast_{date}.json")
     fast = _route(frm, to, [], t)
@@ -123,18 +143,22 @@ def plan(frm, to, t="2026-11-18T09:50", date="2026-11-18"):
     risky_a = _scan(fast, cells, six_a, A_MIN_STORMS, 0.12, 0.9)[:4]
     live = live_reports(date, t)
     live_a = [x for x in _live_on(fast, live) if x["cell"] not in {r["cell"] for r in risky_a}][:4]
-    excl = [r["cell"] for r in risky_a] + [x["cell"] for x in live_a]
-    route_a = _route(frm, to, excl, t) if excl else fast
-    pre = decide_pre_trip(fast, route_a, risky_a, six_a, fc_night, live_a, len(live)) if excl else None
-    if pre and pre["action"] == "keep_route":
-        route_a = fast
-    return {"from": frm, "to": to, "t": t, "date": date, "pre_decision": pre,
-            "fast": _strip(fast), "route_a": _strip(route_a), "risky_a": risky_a, "live_a": live_a,
+    pw = _pre_watch(fast, cells, live, date, t)
+    excl = [r["cell"] for r in risky_a] + [x["cell"] for x in live_a] + ([pw["cell"]] if pw else [])
+    alt = _route(frm, to, excl, t) if excl else fast
+    if pw:   # forecast at the minute the car would reach the spot on the fastest route
+        fc_latest = _j(f"forecast_{date}_latest.json") or fc_night
+        eh = [h for h in fc_latest["hours"] if h["t"][:13] == pw["eta"][:13]]
+        pw["forecast_at_eta"] = {"t": pw["eta"], "mm": eh[0]["mm"] if eh else 0, "six_h_mm": _six(fc_latest, pw["eta"])}
+    # the car starts on the fastest route; it only switches to `alt` if the pre-trip simulation shows real risk
+    return {"from": frm, "to": to, "t": t, "date": date, "pre_decision": None, "pre_watch": pw, "alt": _strip(alt),
+            "_alt_dist": alt["dist"], "_fast_dist": fast["dist"],
+            "fast": _strip(fast), "route_a": _strip(fast), "risky_a": risky_a, "live_a": live_a,
             "live": [{k: e[k] for k in ("t", "lat", "lon", "address")} for e in live], "live_photos": live_photos(date, t),
             "pre_trip": {"forecast_source": fc_night["source"], "six_h_mm": six_a,
                          "day_total_mm": fc_night["total_mm"],
                          "hours": [h for h in fc_night["hours"] if "06:00" <= h["t"][11:16] <= "12:00"]},
-            "_route_a_dist": route_a["dist"]}
+            "_route_a_dist": fast["dist"]}
 
 
 def check(p, at_index, min_frac=0.0):
@@ -331,9 +355,10 @@ DECISION_SCHEMA = {
 
 SIM_POLICY = (
     "The Genie 4 simulation judged by Decision 1 is the best estimate of the water THIS car will meet when it gets "
-    "there. Reroute only if it shows a real risk to the car: action 'avoid'; or water across at least half the lane "
-    "(lane_covered >= 0.5) AND water reaching the tire sidewall (p_tire_or_worse >= 0.3); or a closed lane "
-    "(lane_closed >= 0.5). Flood history, nearby 311 reports and the forecast are why the car looked, not by "
+    "there. Reroute only if it shows a real risk to the car: Decision 1 action 'avoid'; or water likely at the tire "
+    "sidewall or deeper (p_tire_or_worse >= 0.5); or water across most of the lane (lane_covered >= 0.7) AND "
+    "p_tire_or_worse >= 0.35; or a closed lane (lane_closed >= 0.5). Shallow water, puddles or a wet road are NOT a "
+    "reason to reroute. Flood history, nearby 311 reports and the forecast are why the car looked, not by "
     "themselves a reason to reroute. If the simulation shows puddles or only a wet road, keep the route and say "
     "plainly that the car checked and the street is passable.")
 
@@ -417,3 +442,24 @@ def closures(date, t_from, t_to):
 def closures_near(coords, cl, m=40):
     pts = coords[::2]
     return [c for c in cl if any(min(_dist_m(a, b) for a in pts) < m for b in c["line"])]
+
+
+def pre_decide(p, sim):
+    """Before pickup: Carbon decides from the simulated spot on the fastest route; sets the route the car takes."""
+    pw, fast, alt = p["pre_watch"], p["fast"], p["alt"]
+    dec = decide({
+        "moment": "before pickup: the car simulated the worst spot on the fastest route",
+        "spot_on_fastest_route": pw["name"].title(), "reached_at": pw["eta"][11:16],
+        "real_311_photo_here": {"time": pw["photo"]["t"][11:16], "address": pw["photo"]["address"]},
+        "live_311_street_flood_reports_within_300m_so_far": [{"time": e["t"][11:16], "address": e["address"]} for e in pw["live_near"]][-6:],
+        "past_storms_with_street_flooding": pw["n_storm_days"],
+        "forecast_at_arrival": pw.get("forecast_at_eta"),
+        "genie4_simulation_judged_by_decision1": (sim or {}).get("verdict"),
+        "fastest_route": {"minutes": fast["min"]},
+        "flood_aware_route": {"minutes": alt["min"], "extra_minutes": round(alt["min"] - fast["min"], 1)},
+        "options": {"reroute": "take the flood-aware route", "keep_route": "take the fastest route"}})
+    take_alt = dec["action"] == "reroute"
+    p["route_a"] = alt if take_alt else fast
+    p["_route_a_dist"] = p["_alt_dist"] if take_alt else p["_fast_dist"]
+    p["pre_decision"] = dec
+    return {"decision": dec, "route_a": p["route_a"]}

@@ -188,6 +188,26 @@ class Handler(SimpleHTTPRequestHandler):
             RIDE.clear()
             RIDE["plan"] = p
             return self.send_json({k: v for k, v in p.items() if not k.startswith("_")})
+        if u.path == "/api/ride/presim":
+            from pipeline import ride
+            pw = RIDE["plan"].get("pre_watch")
+            if not pw:
+                return self.send_json({"error": "no spot to simulate"}, 400)
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            try:
+                RIDE["presim"] = ride.simulate(pw, {"t": RIDE["plan"]["t"], "peak": {"t": pw["eta"], "mm": pw["forecast_at_eta"]["mm"]},
+                                                    "six_h_mm": pw["forecast_at_eta"]["six_h_mm"]}, GENIE)
+                return self.send_json(RIDE["presim"])
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
+        if u.path == "/api/ride/predecide":
+            from pipeline import ride
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            out = ride.pre_decide(RIDE["plan"], RIDE.get("presim"))
+            RIDE.pop("check", None); RIDE.pop("proof", None)
+            return self.send_json({"decision": out["decision"], "route_a": {k: v for k, v in out["route_a"].items() if k != "dist"}})
         if u.path == "/api/ride/check":
             from pipeline import ride
             RIDE["check"] = ride.check_auto(RIDE["plan"])
@@ -209,7 +229,7 @@ class Handler(SimpleHTTPRequestHandler):
             p, c = RIDE["plan"], RIDE.get("check") or {"risky_b": []}
             if GENIE["session"]:
                 GENIE["session"].stop()
-            excl = [r["cell"] for r in p["risky_a"]] + [x["cell"] for x in p.get("live_a", [])] + [r["cell"] for r in c["risky_b"]]
+            excl = [r["cell"] for r in p["risky_a"]] + [x["cell"] for x in p.get("live_a", [])] + ([p["pre_watch"]["cell"]] if p.get("pre_watch") else []) + [r["cell"] for r in c["risky_b"]]
             here, idx = b["here"], int(b.get("index", c.get("at_index", 0)))
             route_b = ride.reroute(p, here, b["t"], excl)
             rest_a_min = round((datetime.fromisoformat(p["route_a"]["times"][-1]) - datetime.fromisoformat(b["t"])).total_seconds() / 60, 1)

@@ -46,7 +46,7 @@ body.paused .caption::before{background:var(--cone);box-shadow:none}
 .st.done,.st.active{cursor:pointer;border-radius:10px;margin:0 -8px;padding-left:8px;padding-right:8px}
 .st.done:hover,.st.active:hover{background:#121821}
 .st.viewing{background:#13202c;outline:1px solid rgba(56,225,255,.5)}
-#review{flex:1;overflow:auto;padding:10px 20px 18px}
+#review{flex:1;min-height:0;overflow:auto;padding:10px 20px 18px}
 .rvbar{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;background:#33230b;color:var(--cone);border-radius:10px;padding:8px 12px;font:700 14px Inter}
 .rvbar button{background:var(--cone);color:#1a0e00;border:0;border-radius:8px;padding:6px 12px;font:800 13px Inter;cursor:pointer}
 #review .card{opacity:.95}
@@ -97,13 +97,14 @@ body.paused .caption::before{background:var(--cone);box-shadow:none}
 .verdict .meters{grid-template-columns:1fr 1fr;column-gap:24px}
 
 /* panel */
-aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0;height:100vh;overflow:hidden}
+aside>.tripcard,aside>#steps,aside>.src{flex:none}
 .head{padding:18px 22px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
 .head h2{margin:0;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .btn{background:var(--accent);color:#001018;border:0;border-radius:12px;padding:12px 22px;font-weight:800;cursor:pointer;font-size:18px}
 .btn.wide{width:100%;margin-top:14px}
 .btn:disabled{opacity:.35;cursor:default}
-.feed{flex:1;overflow:auto;padding:18px 20px;scroll-behavior:smooth}
+.feed{flex:1;min-height:0;overflow:auto;padding:18px 20px;scroll-behavior:smooth}
 .done{display:flex;gap:10px;align-items:flex-start;color:var(--muted);font-size:15px;padding:8px 0;border-bottom:1px solid var(--line);min-width:0}
 .done span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .done b{color:var(--text);font-weight:600}.done .ck{color:var(--route);font-weight:800}
