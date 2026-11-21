@@ -20,8 +20,8 @@ Status values: `todo` · `doing` · `done` · `blocked` · `cut`
 | C1 | Flood memory pipeline | done (Claude) | `.venv/bin/python -m pipeline.build` → 778 events, 10 AM = 384. `cells.json` holds history before 2026-11-18 only. |
 | C2 | Baseline zones | done (Claude) | `.venv/bin/python -m pipeline.baseline` → `data/zones_2026-11-18_baseline.json`: 100 zones, 8.0% of SF, 41% of Nov 18 floods inside an active zone. |
 | C3 | Server and replay map | done (Claude) | `.venv/bin/python server.py` → http://localhost:8000. Approve all, then Play: at 10:01 AM the baseline catches 44% of floods so far. Runtime approvals go to `data/approvals_<date>_<set>.json` (git-ignored). |
-| C4 | Approval and score card | doing (Claude) | |
-| C5 | Rerouting (Valhalla) | todo | |
+| C4 | Approval and score card | done (Claude) | `GET /api/score?date=2026-11-18&set=baseline` → approved-only score plus `if_all_approved`. Baseline, all proposed: 41% caught, 8% area, 5.5 h median lead. The UI shows a Carbon row once `zones_<date>.json` exists. Edit-window control cut for now. |
+| C5 | Rerouting (Valhalla) | doing (Claude) | |
 | C6 | Webcam page → `gem.vision` + `gem.agent` | todo | Needs G2, G4 |
 | C7 | Live mode (Nov 25) + "View flooded" | todo | Needs G3, G5 |
 
