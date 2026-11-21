@@ -29,9 +29,9 @@ Status values: `todo` · `doing` · `done` · `blocked` · `cut`
 
 | ID | Task | Status | Check / notes |
 |---|---|---|---|
-| G1 | Access probe (Genie 4, Managed Agents, Omni, Nano Banana) | todo | Claude already checked that `models/genie-4` is visible (`bidiGenerateContent`). |
-| G2 | `vision.judge_frame` (Decision 1) | todo | |
-| G3 | `plan.propose_zones` (Carbon) | todo | Inputs ready: `data/cells.json`, `data/forecast_2026-11-18.json` |
+| G1 | Access probe (Genie 4, Managed Agents, Omni, Nano Banana) | doing (Gemini) | Claude already checked that `models/genie-4` is visible (`bidiGenerateContent`). |
+| G2 | `vision.judge_frame` (Decision 1) | doing (Gemini) | |
+| G3 | `plan.propose_zones` (Carbon) | doing (Gemini) | Inputs ready: `data/cells.json`, `data/forecast_2026-11-18.json` |
 | G4 | `agent.run_incident` (Managed Agent) | todo | |
 | G5 | `world.render_flood` (Genie 4 → Omni → Nano Banana) | todo | |
 | G6 | `vision.judge_video` (stretch) | todo | |
