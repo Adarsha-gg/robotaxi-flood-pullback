@@ -184,7 +184,24 @@ def judge_car(jpeg):
 
 
 def simulate(watch, chk, session_holder, settle_s=1.2, max_wait=25):
-    """Genie 4 from the robotaxi roof camera at the watch block; Decision 1 car rubric on a simulated frame."""
+    """Genie 4 at the watch block; prefer Lane G's simulate_street (3 judged frames, pre-warm, cached
+    real-Genie fallback so the stage never breaks); fall back to the in-house version."""
+    try:
+        from gem.sim import simulate_street
+        r = simulate_street(watch, chk, session_holder)
+        if r and r.get("verdict") and (r.get("frame") or r.get("source", "").startswith("cache")):
+            v = r["verdict"]
+            v.setdefault("action", "avoid" if v.get("p_tire_or_worse", 0) >= 0.5 and v.get("lane_covered", 0) >= 0.6 else
+                         "slow" if v.get("lane_covered", 0) >= 0.5 else "proceed")
+            r.setdefault("total_s", r.get("waited_s"))
+            r.setdefault("frames_seen", len(v.get("per_frame") or []))
+            return r
+    except Exception:
+        pass
+    return _simulate_direct(watch, chk, session_holder, settle_s, max_wait)
+
+
+def _simulate_direct(watch, chk, session_holder, settle_s=1.2, max_wait=25):
     from gem.world import GenieSession
     photo = watch["photo"]
     with open(os.path.join(ROOT, photo["path"]), "rb") as f:
@@ -272,7 +289,21 @@ DECISION_SCHEMA = {
 
 
 def decide(ctx):
-    """Gemini 4 Carbon makes the call autonomously (no human approval)."""
+    """Gemini 4 Carbon makes the call autonomously (no human approval).
+    Uses Lane G's hardened gem.explain.decide (9 s timeout, never raises); falls back to the direct call."""
+    try:
+        from gem.explain import decide as hardened
+        out = hardened(ctx, timeout_s=8.0)
+        if out and out.get("action") in ("reroute", "keep_route") and out.get("reasons"):
+            out.setdefault("latency_ms", 0)
+            out.setdefault("model", "gemini-4-carbon")
+            return out
+    except Exception:
+        pass
+    return _decide_direct(ctx)
+
+
+def _decide_direct(ctx):
     from google.genai import types
     from gem.client import shared_client
     t0 = time.time()

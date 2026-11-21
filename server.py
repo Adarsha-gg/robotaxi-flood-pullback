@@ -11,7 +11,7 @@
 Run: .venv/bin/python server.py  (http://localhost:8000)
 """
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -98,7 +98,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         u = urlparse(self.path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
-        if u.path in ("/", "/index.html"):
+        if u.path in ("/", "/ride", "/ride.html") and False:
+            pass
+        if u.path == "/":
+            self.path = "/web/ride.html"
+            return super().do_GET()
+        if u.path in ("/ops", "/index.html"):
             self.path = "/web/index.html"
             return super().do_GET()
         if u.path == "/api/zones":
@@ -214,8 +219,18 @@ class Handler(SimpleHTTPRequestHandler):
                 "alternative_route": {"minutes": route_b["min"], "eta_change_min": round(route_b["min"] - rest_a_min, 1), "flagged_blocks_crossed": 0},
                 "options": {"reroute": "switch to the alternative route now", "keep_route": "stay on the current route"}})
             final = route_b if dec["action"] == "reroute" else {**p["route_a"], "coords": p["route_a"]["coords"][idx:], "times": p["route_a"]["times"][idx:]}
-            driven = p["route_a"]["coords"][:idx + 1] + final["coords"]
-            return self.send_json({"route_b": final, "decision": dec, "proof": ride.proof(p, driven, p["t"])})
+            # deterministic proof: the reroute as planned from a fixed point (check time + 2 min), so the
+            # number on screen is the same every run regardless of animation timing
+            proof = RIDE.get("proof")
+            if not proof:
+                times = p["route_a"]["times"]
+                fx = next((i for i, t in enumerate(times) if t >= (datetime.fromisoformat(c["t"]) + timedelta(minutes=2)).isoformat()), idx)
+                planned = ride.reroute(p, p["route_a"]["coords"][fx], times[fx], excl) if dec["action"] == "reroute" else {"coords": p["route_a"]["coords"][fx:]}
+                proof = ride.proof(p, p["route_a"]["coords"][:fx + 1] + planned["coords"], p["t"])
+                bt = read_json(os.path.join(ROOT, "media", "backtest.json"), {}) or {}
+                proof["backtest"] = bt.get("one_liner")
+                RIDE["proof"] = proof
+            return self.send_json({"route_b": final, "decision": dec, "proof": proof})
         if u.path == "/api/trip/plan":
             from pipeline import trip
             try:
@@ -229,15 +244,23 @@ class Handler(SimpleHTTPRequestHandler):
             from concurrent.futures import ThreadPoolExecutor
             from pipeline import live_ride as LR
             cams = TRIP["plan"]["cams"][:6]
+            def safe(c):
+                try:
+                    return LR.camera_now(c)
+                except Exception as e:
+                    return {"cam": c["id"], "name": c["name"], "available": False, "frame": "", "error": str(e)[:120]}
             with ThreadPoolExecutor(6) as ex:
-                TRIP["cams"] = list(ex.map(LR.camera_now, cams))
+                TRIP["cams"] = list(ex.map(safe, cams))
             return self.send_json(TRIP["cams"])
         if u.path == "/api/trip/simulate":
             from pipeline import trip
             if GENIE["session"]:
                 GENIE["session"].stop()
             try:
-                return self.send_json(trip.simulate(TRIP["plan"], TRIP.get("cams", []), GENIE))
+                out = trip.simulate(TRIP["plan"], TRIP.get("cams", []), GENIE)
+                if GENIE["session"]:
+                    GENIE["session"].stop()
+                return self.send_json(out)
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/live/plan":
@@ -250,8 +273,13 @@ class Handler(SimpleHTTPRequestHandler):
             from concurrent.futures import ThreadPoolExecutor
             from pipeline import live_ride as LR
             cams = LIVE["plan"]["cams"][:6]
+            def safe(c):
+                try:
+                    return LR.camera_now(c)
+                except Exception as e:
+                    return {"cam": c["id"], "name": c["name"], "available": False, "frame": "", "error": str(e)[:120]}
             with ThreadPoolExecutor(6) as ex:
-                res = list(ex.map(lambda c: (lambda: LR.camera_now(c))() if True else None, cams))
+                res = list(ex.map(safe, cams))
             LIVE["cams"] = res
             return self.send_json(res)
         if u.path == "/api/live/simulate":
@@ -272,6 +300,8 @@ class Handler(SimpleHTTPRequestHandler):
                     "genie4_simulation_at_eta_judged_by_decision1": sim["verdict"],
                     "route_already_avoids": [r["name"] for r in p["risky"]],
                     "options": {"reroute": "avoid the streets near this camera tonight", "keep_route": "keep the planned route"}})
+                if GENIE["session"]:
+                    GENIE["session"].stop()
                 return self.send_json(sim)
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
