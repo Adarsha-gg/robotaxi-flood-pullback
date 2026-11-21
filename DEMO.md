@@ -57,6 +57,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 ## Likely judge questions
 
+- **"Doesn't Waymo already do this with its World Model?"** No, it does a different job. Waymo's World Model (Feb 6, 2026, built on DeepMind's Genie 3) runs offline in their simulator: it makes rare scenes, floods included, to train and test the driver before cars ship. We run at trip time: for a real street on today's route, with today's forecast, 311 reports, closures and cameras, Genie 4 shows what the car will meet when it arrives, Carbon decides, and a fleet agent warns the other cars. Waymo had that model since February and still paused San Francisco on Nov 18. "Waymo uses Genie to train the driver. We use Genie to plan the trip."
 - **"Is the Genie scene real?"** It is a simulation, seeded with a real resident photo or a live camera frame. The decision uses it as one input next to real data. We label it "simulated" everywhere.
 - **"Did you cheat with hindsight?"** No. Flood history stops the day before Nov 18. The car only sees 311 reports and photos filed before each decision. Forecasts are the night-before and same-day model runs (Open-Meteo previous-runs archive). Reports after the decision are only used for the final check.
 - **"Human flooding vs car flooding?"** 311 separates street flooding from basement/property flooding. On Nov 18: 691 street, 87 property. The car only uses street reports, and the simulation questions are about the travel lane and the tires.
