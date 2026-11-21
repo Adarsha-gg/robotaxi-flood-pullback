@@ -42,7 +42,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 
 ## 2:30 – 3:00 · It works today (switch to the Plan a trip tab)
 
-**Screen:** press Go on Noe Valley → Chase Center (or ask a judge for two places). Genie starts from the live Caltrans camera US-101 at 23rd St.
+**Screen:** press Go on Castro → Ferry Building (or ask a judge for two places). The risky spot is 1699 Market St (a 311 flood report from Nov 19); Genie starts from the live Caltrans camera US-101 at Octavia St, 144 m away.
 
 **Say:** "And it runs live. Any two places in San Francisco. It pulls flood reports from the last three days, tonight's forecast, live lane closures and live Caltrans cameras, simulates the worst spot with Genie 4, and Carbon decides. Same loop works for any hazard a robotaxi struggles with: floods today, construction zones next, which is exactly why Waymo got pulled off California freeways."
 
@@ -53,7 +53,7 @@ The numbers below are what the app shows every run (checked twice on 2026-11-21)
 - **Genie slow or down:** the simulations fall back to real cached Genie runs of 1777 Oak St and Franklin & Geary. Nothing to say.
 - **Carbon slow:** after 8 seconds a rule-based fallback decides, with the same card. Nothing to say.
 - **Wi-Fi dies:** play the backup screen recording. Record one full Replay run before the demo.
-- **A Plan-a-trip address isn't found:** use "Noe Valley" → "Chase Center".
+- **A Plan-a-trip address isn't found:** use "Castro" → "Ferry Building" (backup: "Noe Valley" → "Chase Center", camera US-101 at 23rd St).
 
 ## Likely judge questions
 
