@@ -106,6 +106,12 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "no zones"}, 404)
             z["set"] = zset
             return self.send_json(z)
+        if u.path == "/api/camera/incidents":
+            from pipeline.camera import incidents
+            return self.send_json(incidents(q.get("date", "2026-11-18")))
+        if u.path in ("/cam", "/cam.html"):
+            self.path = "/web/cam.html"
+            return super().do_GET()
         if u.path == "/api/genie/status":
             s = GENIE["session"]
             return self.send_json({"photo": GENIE["photo"], **(s.info() if s else {"status": "idle"})})
@@ -201,7 +207,14 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json(route(b, load_zones))
         if u.path == "/api/camera":
             from pipeline.camera import handle
-            return self.send_json(handle(b))
+            try:
+                return self.send_json(handle(b))
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
+        if u.path == "/api/camera/reset":
+            from pipeline.camera import reset
+            reset(b.get("date", "2026-11-18"))
+            return self.send_json({"ok": True})
         self.send_error(404)
 
 

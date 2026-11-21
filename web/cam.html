@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fleet Camera</title>
+<style>
+:root{--bg:#0b0d10;--panel:#13161b;--line:#242a33;--text:#e8eaed;--muted:#8a919c;--red:#ff4d4f;--green:#2fd18b;--blue:#4da3ff;--amber:#ffb020}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 -apple-system,system-ui,sans-serif}
+header{display:flex;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:17px;margin:0}h1 b{color:var(--blue)}
+a{color:var(--blue)}
+main{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;padding:16px}
+@media (max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px}
+video,#still{width:100%;border-radius:8px;background:#000;aspect-ratio:16/9;object-fit:cover;display:block}
+select,button{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 10px}
+button.go{border-color:var(--blue)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+#verdict{font-size:30px;font-weight:700;margin:4px 0}
+.meter{height:10px;background:var(--bg);border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.meter div{height:100%;background:var(--green);width:0;transition:width .3s}
+.muted{color:var(--muted);font-size:12px}
+.step{border-left:2px solid var(--blue);padding:4px 8px;margin:6px 0;font-size:12px}
+.step b{color:var(--blue)}
+pre{white-space:pre-wrap;font-size:11px;color:var(--muted);margin:2px 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>Fleet <b>Camera</b></h1>
+  <span class="muted">Every car is a flood sensor: Gemini Decision 1 judges each frame, and a Managed Agent closes the street for the whole fleet.</span>
+  <a href="/" target="_blank">Open fleet map ↗</a>
+</header>
+<main>
+  <div class="card">
+    <div class="row">
+      <label>Car <select id="car"><option>W-112</option><option>W-207</option><option>W-318</option></select></label>
+      <label>Position <select id="pos"></select></label>
+      <label>Source <select id="src"><option value="cam">Live webcam</option><option value="photo">Real 311 photo at this position</option></select></label>
+    </div>
+    <video id="video" autoplay playsinline muted></video>
+    <img id="still" style="display:none">
+    <div class="row">
+      <button class="go" id="start">▶ Start sending frames (every 2 s)</button>
+      <button id="once">Send one frame</button>
+      <button id="reset">Reset camera zones</button>
+      <span class="muted" id="sent"></span>
+    </div>
+    <p class="muted">Photos come from San Francisco 311 street-flooding reports on 2026-11-18 (resident uploads, DataSF).</p>
+  </div>
+  <div class="card">
+    <div class="muted">Gemini Decision 1 · “Is standing water covering the roadway?”</div>
+    <div id="verdict">–</div>
+    <div class="meter"><div id="bar"></div></div>
+    <div class="muted" id="vmeta" style="margin-top:6px"></div>
+    <h3 style="font-size:13px;margin:16px 0 6px">Managed Agent incident</h3>
+    <div id="inc" class="muted">Waiting for a flooded frame (p ≥ 0.80)…</div>
+  </div>
+</main>
+<canvas id="cv" width="1280" height="720" style="display:none"></canvas>
+<script>
+const DATE = '2026-11-18';
+const $ = id => document.getElementById(id);
+let photos = [], timer = null, nSent = 0, lastInc = null;
+const j = (u, o) => fetch(u, o).then(r => r.json());
+
+async function init() {
+  photos = await j(`/data/photos_${DATE}.json`);
+  const seen = new Set();
+  $('pos').innerHTML = photos.filter(p => !seen.has(p.address) && seen.add(p.address)).slice(0, 25)
+    .map(p => `<option value="${photos.indexOf(p)}">${p.address} (${p.t.slice(11, 16)})</option>`).join('');
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
+    $('video').srcObject = s;
+  } catch (e) { $('src').value = 'photo'; $('vmeta').textContent = 'No webcam access, so using real 311 photos.'; }
+  showSource();
+}
+function photo() { return photos[+$('pos').value]; }
+function showSource() {
+  const usePhoto = $('src').value === 'photo';
+  $('video').style.display = usePhoto ? 'none' : 'block';
+  $('still').style.display = usePhoto ? 'block' : 'none';
+  if (usePhoto) $('still').src = '/' + photo().path;
+}
+$('src').onchange = showSource; $('pos').onchange = showSource;
+
+async function frameB64() {
+  const cv = $('cv'), g = cv.getContext('2d');
+  const el = $('src').value === 'photo' ? $('still') : $('video');
+  if (el.tagName === 'IMG' && !el.complete) await new Promise(r => el.onload = r);
+  const w = el.videoWidth || el.naturalWidth, h = el.videoHeight || el.naturalHeight;
+  cv.width = Math.min(1280, w); cv.height = Math.round(cv.width * h / w);
+  g.drawImage(el, 0, 0, cv.width, cv.height);
+  return cv.toDataURL('image/jpeg', 0.85);
+}
+async function send() {
+  const p = photo();
+  const t0 = performance.now();
+  const r = await j('/api/camera', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({image_b64: await frameB64(), lat: p.lat, lon: p.lon, car_id: $('car').value, t: p.t.slice(0, 16), date: DATE})});
+  $('sent').textContent = `${++nSent} frames sent`;
+  if (r.error) { $('vmeta').textContent = r.error; return; }
+  const v = r.verdict, pct = Math.round(v.flooded_p * 100);
+  $('verdict').textContent = v.flooded_p >= 0.8 ? `FLOODED · ${pct}%` : `clear · ${pct}%`;
+  $('verdict').style.color = v.flooded_p >= 0.8 ? 'var(--red)' : 'var(--green)';
+  $('bar').style.width = pct + '%'; $('bar').style.background = v.flooded_p >= 0.8 ? 'var(--red)' : 'var(--green)';
+  $('vmeta').textContent = `depth: ${v.depth_label} (${v.depth_score}) · Decision 1 ${v.latency_ms} ms · round trip ${Math.round(performance.now() - t0)} ms · ${v.car_id} at ${p.address}`;
+  if (r.incident && r.incident.id) lastInc = r.incident.id;
+}
+async function pollInc() {
+  const list = await j(`/api/camera/incidents?date=${DATE}`).catch(() => []);
+  const i = list.find(x => x.id === lastInc) || list[0];
+  if (!i) return;
+  const secs = Math.round((Date.now() / 1000) - i.started);
+  let h = `<div><b>${i.status === 'running' ? `Agent running… ${secs}s` : i.status === 'zone_added' ? `Zone added for the whole fleet in ${i.agent_s}s` : i.status}</b> · ${i.verdict.car_id} at ${i.verdict.cell}</div>`;
+  for (const s of i.steps || []) h += `<div class="step"><b>${s.tool}</b><pre>${JSON.stringify(s.args).slice(0, 220)}</pre></div>`;
+  if (i.zone) h += `<div class="step" style="border-color:var(--red)"><b style="color:var(--red)">${i.zone.name}</b> · ${i.zone.start?.slice(11, 16)}–${i.zone.end?.slice(11, 16)} · ${i.zone.cells?.length} cells<pre>${i.zone.fleet_notice || i.zone.reason || ''}</pre></div>`;
+  if (i.error) h += `<div class="step" style="border-color:var(--red)">${i.error}</div>`;
+  $('inc').innerHTML = h;
+}
+$('once').onclick = send;
+$('start').onclick = () => {
+  if (timer) { clearInterval(timer); timer = null; $('start').textContent = '▶ Start sending frames (every 2 s)'; return; }
+  send(); timer = setInterval(send, 2000); $('start').textContent = '❚❚ Stop';
+};
+$('reset').onclick = async () => { await j('/api/camera/reset', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({date: DATE})}); lastInc = null; $('inc').textContent = 'Camera zones cleared.'; };
+setInterval(pollInc, 1500);
+init();
+</script>
+</body>
+</html>

@@ -214,7 +214,8 @@ function update(full) {
   document.getElementById('sIn').textContent = inn;
   document.getElementById('sPct').textContent = n ? Math.round(100 * inn / n) + '%' : '–';
   document.getElementById('clock').textContent = fmt(Math.floor(clock));
-  document.getElementById('banner').style.display = clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none';
+  const bn = document.getElementById('banner');
+  if (!bn.textContent.includes('saw water')) { bn.textContent = '11:00 AM · Waymo paused all San Francisco service'; bn.style.display = clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none'; }
   styleZones(); drawRain();
 }
 
@@ -244,6 +245,22 @@ function tick(now) {
   if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶ Play'; }
   update(); if (playing) requestAnimationFrame(tick);
 }
+// ---- live camera zones from the fleet ----
+let camN = -1;
+setInterval(async () => {
+  const z = await j(`/api/zones?date=${DATE}&set=${SET}`).catch(() => null); if (!z) return;
+  const cams = z.zones.filter(x => x.source === 'camera');
+  if (camN >= 0 && cams.length > camN) {
+    const nz = cams[cams.length - 1];
+    zones = z.zones; drawZones(); renderList(); update(true); loadScore(); select(nz.id);
+    const b = document.getElementById('banner');
+    b.textContent = `${nz.car_id || 'A car'} saw water (${Math.round((nz.flooded_p || 0) * 100)}%) → agent closed ${nz.name} for the fleet`;
+    b.style.display = 'block'; b.style.borderColor = '#4da3ff'; setTimeout(() => b.style.display = 'none', 7000);
+    if (tripLayer.getLayers().length) routeTrip();
+  }
+  camN = cams.length;
+}, 3000);
+
 // ---- Genie 4 live world ----
 let gOpen = false, gPoll = null;
 const KEYMAP = {w: 'key_w', a: 'key_a', s: 'key_s', d: 'key_d', ArrowUp: 'arrow_up', ArrowDown: 'arrow_down', ArrowLeft: 'arrow_left', ArrowRight: 'arrow_right', ' ': 'space'};
