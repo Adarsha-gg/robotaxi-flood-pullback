@@ -72,6 +72,9 @@ h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
     <h2>Full-day score vs real floods</h2>
     <table id="dayScore"></table>
     <div class="bar" style="margin-top:10px"><button id="approveAll">Approve all proposed</button><button id="resetAll">Reset</button></div>
+    <h2>Robotaxi trip at the current clock</h2>
+    <div class="bar"><button id="tripBtn">Route demo trip</button><button id="pickBtn">Pick on map</button></div>
+    <p id="tripInfo" style="color:var(--muted);font-size:12px;margin:6px 0 0">Noe Valley → Moscone Center. Red = normal route, green = flood-aware route.</p>
     <h2 id="zoneHead">Zones</h2>
     <div id="zones"></div>
   </aside>
@@ -225,6 +228,32 @@ function tick(now) {
   if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶ Play'; }
   update(); if (playing) requestAnimationFrame(tick);
 }
+const tripLayer = L.layerGroup().addTo(map);
+let trip = {from: [37.7502, -122.4337], to: [37.7840, -122.4010]}, picking = 0;
+async function routeTrip() {
+  const info = document.getElementById('tripInfo');
+  info.textContent = 'Routing…';
+  const t = `${DATE}T${fmt(Math.floor(clock))}`;
+  const r = await j('/api/route', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({date: DATE, set: SET, from: trip.from, to: trip.to, t})}).catch(e => ({error: String(e)}));
+  tripLayer.clearLayers();
+  if (r.error) { info.textContent = 'Route failed: ' + r.error; return; }
+  L.polyline(r.default.coords, {color: '#ff4d4f', weight: 5, opacity: 0.8, dashArray: '8 6'}).addTo(tripLayer);
+  L.polyline(r.safe.coords, {color: '#2fd18b', weight: 5, opacity: 0.95}).addTo(tripLayer);
+  L.circleMarker(trip.from, {radius: 7, color: '#fff', fillColor: '#4da3ff', fillOpacity: 1}).bindTooltip('pickup').addTo(tripLayer);
+  L.circleMarker(trip.to, {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).bindTooltip('drop-off').addTo(tripLayer);
+  info.innerHTML = `At ${fmt(Math.floor(clock))}: normal route crosses <b style="color:var(--red)">${r.default.flood_cells ?? '?'}</b> flood-prone blocks (${r.default.min} min). ` +
+    `Flood-aware route crosses <b style="color:var(--green)">${r.safe.flood_cells ?? '?'}</b> (${r.safe.min} min, ${r.added_min >= 0 ? '+' : ''}${r.added_min} min). ` +
+    `<span style="opacity:.7">${r.active_zones} approved zones active · ${r.router}</span>`;
+}
+document.getElementById('tripBtn').onclick = routeTrip;
+document.getElementById('pickBtn').onclick = () => { picking = 1; document.getElementById('tripInfo').textContent = 'Click the pickup point on the map…'; };
+map.on('click', e => {
+  if (!picking) return;
+  const p = [+e.latlng.lat.toFixed(5), +e.latlng.lng.toFixed(5)];
+  if (picking === 1) { trip.from = p; picking = 2; document.getElementById('tripInfo').textContent = 'Now click the drop-off point…'; }
+  else { trip.to = p; picking = 0; routeTrip(); }
+});
 document.getElementById('approveAll').onclick = () => setStatus(zones.filter(z => z.status === 'proposed').map(z => z.id), 'approved');
 document.getElementById('resetAll').onclick = () => setStatus(zones.map(z => z.id), 'proposed');
 document.querySelectorAll('#setSeg button').forEach(b => b.onclick = () => { SET = b.dataset.set; loadZones(); });
