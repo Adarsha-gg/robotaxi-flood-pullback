@@ -578,6 +578,7 @@ def _run_managed_agent_loop(
     """Run multi-turn tool loop using Antigravity Managed Agents (antigravity-preview-09-2026)."""
     beta = get_beta_client()
     trace: list[dict[str, Any]] = []
+    thoughts: list[str] = []
     prev_id: str | None = None
     first_interaction_id: str | None = None
     next_input: Any = prompt
@@ -609,6 +610,12 @@ def _run_managed_agent_loop(
             first_interaction_id = str(prev_id)
         status = getattr(interaction, "status", None)
         steps = getattr(interaction, "steps", None) or []
+
+        for s in steps:
+            if getattr(s, "type", None) == "thought":
+                summ = getattr(s, "summary", None)
+                if summ:
+                    thoughts.append(str(summ))
 
         if status == "failed":
             raise RuntimeError(f"Managed Agent interaction failed (id={prev_id})")
@@ -662,7 +669,7 @@ def _run_managed_agent_loop(
 
     if not trace:
         raise RuntimeError(f"Managed Agent returned no tool calls (id={first_interaction_id})")
-    return trace, first_interaction_id
+    return trace, first_interaction_id, thoughts
 
 
 def _run_carbon_fallback_loop(
@@ -844,8 +851,9 @@ def run_incident(verdict: dict[str, Any], on_step: Any = None) -> list[dict[str,
 
     agent_engine = MANAGED_AGENT_NAME
     interaction_id: str | None = None
+    thoughts: list[str] = []
     try:
-        trace, interaction_id = _run_managed_agent_loop(
+        trace, interaction_id, thoughts = _run_managed_agent_loop(
             prompt,
             target_cell=target_cell,
             incident_t=incident_t,
@@ -876,6 +884,8 @@ def run_incident(verdict: dict[str, Any], on_step: Any = None) -> list[dict[str,
         final_steps[-1]["result"]["agent_engine"] = agent_engine
         if interaction_id:
             final_steps[-1]["result"]["interaction_id"] = interaction_id
+        if thoughts:
+            final_steps[-1]["result"]["thought_summary"] = " | ".join(thoughts[:3])
     return final_steps
 
 

@@ -34,6 +34,7 @@ class GenieSession:
         self.frames, self.audio = [], bytearray()   # kept for the MP4 save
         self._loop = None
         self._queue = None
+        self._recv_task = None
         self._stop = threading.Event()
         self._cond = threading.Condition()
         self.interaction_id = None
@@ -52,6 +53,11 @@ class GenieSession:
 
     def stop(self):
         self._stop.set()
+        if self._loop and self._recv_task:
+            try:
+                self._loop.call_soon_threadsafe(self._recv_task.cancel)
+            except Exception:
+                pass
 
     def wait_frame(self, last_no: int, timeout: float = 2.0):
         with self._cond:
@@ -96,28 +102,11 @@ class GenieSession:
                                  "reference_image": {"data": base64.b64encode(self.image).decode(), "mime_type": self.mime}})
                 self.status = "warming"
                 sender = asyncio.create_task(self._send_loop(conn))
+                self._recv_task = asyncio.create_task(self._recv_loop(conn))
                 try:
-                    async for ev in conn.receive():
-                        if self._stop.is_set() or time.time() - self.started_at > self.max_seconds:
-                            break
-                        et = str(getattr(ev, "event_type", ""))
-                        if et == "error" or "completed" in et or "cancel" in et:
-                            self.error = None if "completed" in et else str(ev)[:300]
-                            break
-                        d = getattr(ev, "delta", None)
-                        data = getattr(d, "data", None) if d is not None else None
-                        if not data:
-                            continue
-                        raw = base64.b64decode(data) if isinstance(data, str) else data
-                        if raw[:2] == b"\xff\xd8":  # JPEG frame
-                            self.frames.append(raw)
-                            with self._cond:
-                                self.frame, self.frame_no = raw, self.frame_no + 1
-                                self.first_frame_at = self.first_frame_at or time.time()
-                                self.status = "live"
-                                self._cond.notify_all()
-                        else:                        # 48 kHz s16le stereo PCM
-                            self.audio += raw
+                    await self._recv_task
+                except asyncio.CancelledError:
+                    pass
                 finally:
                     sender.cancel()
                     try:
@@ -136,6 +125,31 @@ class GenieSession:
                 self.status = "stopped"
             with self._cond:
                 self._cond.notify_all()
+
+    async def _recv_loop(self, conn):
+        async for ev in conn.receive():
+            if self._stop.is_set() or time.time() - self.started_at > self.max_seconds:
+                break
+            et = str(getattr(ev, "event_type", ""))
+            if et == "error" or "completed" in et or "cancel" in et:
+                self.error = None if "completed" in et else str(ev)[:300]
+                break
+            d = getattr(ev, "delta", None)
+            data = getattr(d, "data", None) if d is not None else None
+            if not data:
+                continue
+            mime = str(getattr(d, "mime_type", "") or "").lower()
+            raw = base64.b64decode(data) if isinstance(data, str) else data
+            if raw[:2] == b"\xff\xd8":  # JPEG frame
+                self.frames.append(raw)
+                with self._cond:
+                    self.frame, self.frame_no = raw, self.frame_no + 1
+                    self.first_frame_at = self.first_frame_at or time.time()
+                    self.status = "live"
+                    self._cond.notify_all()
+            elif mime.startswith("audio/") or (not mime and not raw[:4] in (b"\x00\x00\x00\x0c", b"\xff\x4f\xff\x51")):
+                # 48 kHz s16le stereo PCM (skip unknown/JPEG2000 video blobs)
+                self.audio += raw
 
     async def _send_loop(self, conn):
         while True:

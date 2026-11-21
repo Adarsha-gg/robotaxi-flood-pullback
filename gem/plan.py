@@ -194,6 +194,80 @@ def _clean_time(ts: str, date: str, fallback: str) -> str:
 
 
 MIN_STORM_DAYS = 2
+WAYMO_ALPHA = 0.50  # CPUC 2026 Q3 Waymo tract weight (strictly pre-Nov-18, zero leakage)
+
+
+def _load_waymo_tracts() -> list[tuple[tuple[float, float, float, float], list[list[list[float]]], int]]:
+    """Load CPUC Q3 2026 Waymo active tract polygons (strictly pre-Nov-18)."""
+    path = REPO_ROOT / "data" / "waymo_sf.geojson"
+    if not path.exists():
+        return []
+    try:
+        geo = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    tracts: list[tuple[tuple[float, float, float, float], list[list[list[float]]], int]] = []
+    for feat in geo.get("features", []):
+        coll = int((feat.get("properties") or {}).get("waymo_collisions_q3", 0) or 0)
+        if coll <= 0:
+            continue
+        geom = feat.get("geometry") or {}
+        gtype = geom.get("type")
+        coords = geom.get("coordinates") or []
+        rings = [coords[0]] if gtype == "Polygon" and coords else [p[0] for p in coords if p] if gtype == "MultiPolygon" else []
+        if not rings:
+            continue
+        xs = [pt[0] for r in rings for pt in r]
+        ys = [pt[1] for r in rings for pt in r]
+        tracts.append(((min(xs), min(ys), max(xs), max(ys)), rings, coll))
+    return tracts
+
+
+def _cell_waymo_collisions(
+    lon: float,
+    lat: float,
+    tracts: list[tuple[tuple[float, float, float, float], list[list[list[float]]], int]],
+) -> int:
+    for bbox, rings, coll in tracts:
+        if bbox[0] <= lon <= bbox[2] and bbox[1] <= lat <= bbox[3]:
+            for ring in rings:
+                if _point_in_polygon(lon, lat, ring):
+                    return coll
+    return 0
+
+
+def _ward_cluster_cells(
+    cell_ids: list[str],
+    target_k: int,
+) -> list[list[str]]:
+    """Pure-Python Ward hierarchical clustering on grid (row, col) into compact corridors."""
+    if len(cell_ids) <= target_k:
+        return [[cid] for cid in cell_ids]
+    clusters: list[dict[str, Any]] = []
+    for cid in cell_ids:
+        r, c = _parse_cell_id(cid)
+        clusters.append({"ids": [cid], "sr": float(r), "sc": float(c)})
+    while len(clusters) > target_k:
+        best_d = 1e18
+        bi, bj = 0, 1
+        n_cl = len(clusters)
+        for i in range(n_cl):
+            ni = len(clusters[i]["ids"])
+            ri = clusters[i]["sr"] / ni
+            ci = clusters[i]["sc"] / ni
+            for j in range(i + 1, n_cl):
+                nj = len(clusters[j]["ids"])
+                rj = clusters[j]["sr"] / nj
+                cj = clusters[j]["sc"] / nj
+                d = (ni * nj / (ni + nj)) * ((ri - rj) ** 2 + (ci - cj) ** 2)
+                if d < best_d:
+                    best_d, bi, bj = d, i, j
+        a, b = clusters[bi], clusters[bj]
+        a["ids"].extend(b["ids"])
+        a["sr"] += b["sr"]
+        a["sc"] += b["sc"]
+        clusters.pop(bj)
+    return [cl["ids"] for cl in clusters]
 
 
 def _build_candidate_basins(
@@ -206,73 +280,66 @@ def _build_candidate_basins(
     if total_mm > 0 and total_mm < 20.0:
         # Scale down area budget proportionally on light-rain days (e.g., ~9 mm)
         cell_cap = min(AREA_CAP_CELLS, max(45, int(AREA_CAP_CELLS * (total_mm / 25.0))))
+        target_k = max(3, min(6, int(round(cell_cap / 25.0))))
     else:
         cell_cap = AREA_CAP_CELLS
+        target_k = MAX_ZONES
 
-    at_risk = [
-        c
-        for c in cell_list
-        if int(c.get("n_storm_days", 0)) >= MIN_STORM_DAYS
-        and c.get("thresh_mm_6h") is not None
-        and peak6 >= float(c["thresh_mm_6h"])
-    ]
-    if not at_risk and cell_list:
-        at_risk = [c for c in cell_list if int(c.get("n_storm_days", 0)) >= MIN_STORM_DAYS][:60]
-    at_risk.sort(key=lambda c: (-int(c.get("n_storm_days", 0)), -int(c.get("n_reports", 0))))
-    top_cells = at_risk[:cell_cap]
     all_by_id = {c["id"]: c for c in cell_list}
+    rc_map = {_parse_cell_id(c["id"]): c for c in cell_list}
+    waymo_tracts = _load_waymo_tracts()
 
-    top_ids = [c["id"] for c in top_cells]
-    
-    left = set(top_ids)
-    comps = []
-    while left:
-        start = left.pop()
-        comp, stack = [start], [start]
-        while stack:
-            r, c = _parse_cell_id(stack.pop())
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    n = f"r{r+dr}_c{c+dc}"
-                    if n in left:
-                        left.remove(n)
-                        comp.append(n)
-                        stack.append(n)
-        comps.append(comp)
-        
-    comps.sort(key=lambda comp: sum(int(all_by_id[c].get("n_storm_days", 0)) for c in comp), reverse=True)
-    
-    # Group the baseline components into EXACTLY 12 clusters based on distance
-    clusters = []
-    for comp in comps:
-        placed = False
-        sr, sc = _parse_cell_id(comp[0])
-        for cl in clusters:
-            cr, cc = _parse_cell_id(cl[0])
-            if abs(sr - cr) <= 20 and abs(sc - cc) <= 20: # force merge
-                cl.extend(comp)
-                placed = True
-                break
-        if not placed:
-            if len(clusters) < 12:
-                clusters.append(comp)
-            else:
-                clusters[-1].extend(comp)
-                
+    # Watershed-smoothed basin score * CPUC Q3 Waymo tract weight (strictly pre-Nov-18)
+    scored: list[tuple[float, int, dict[str, Any]]] = []
+    for c in cell_list:
+        if (
+            int(c.get("n_storm_days", 0)) < MIN_STORM_DAYS
+            or c.get("thresh_mm_6h") is None
+            or peak6 < float(c["thresh_mm_6h"])
+        ):
+            continue
+        r, col = _parse_cell_id(c["id"])
+        nbr_sd = sum(
+            int(rc_map[(r + dr, col + dc)].get("n_storm_days", 0))
+            for dr in (-1, 0, 1)
+            for dc in (-1, 0, 1)
+            if (dr or dc) and (r + dr, col + dc) in rc_map
+        )
+        watershed = float(c["n_storm_days"]) + 0.05 * nbr_sd
+        coll = _cell_waymo_collisions(float(c["lon"]), float(c["lat"]), waymo_tracts) if waymo_tracts else 0
+        weight = 1.0 + WAYMO_ALPHA * math.log1p(coll)
+        scored.append((watershed * weight, coll, c))
+
+    if not scored and cell_list:
+        for c in cell_list[:60]:
+            scored.append((float(c.get("n_storm_days", 1)), 0, c))
+
+    scored.sort(key=lambda x: (-x[0], -int(x[2].get("n_reports", 0))))
+    top_scored = scored[:cell_cap]
+    coll_by_id = {c["id"]: coll for _, coll, c in top_scored}
+    top_ids = [c["id"] for _, _, c in top_scored]
+
+    clusters = _ward_cluster_cells(top_ids, target_k=min(target_k, max(1, len(top_ids))))
+    clusters.sort(
+        key=lambda cl: sum(int(all_by_id[cid].get("n_storm_days", 0)) for cid in cl),
+        reverse=True,
+    )
+
     basins = []
-    for i, cl in enumerate(clusters):
+    for cl in clusters:
         comp_objs = [all_by_id[c] for c in cl]
         reps = sum(int(c.get("n_reports", 0)) for c in comp_objs)
         max_sd = max((int(c.get("n_storm_days", 0)) for c in comp_objs), default=1)
         thresholds = [float(c["thresh_mm_6h"]) for c in comp_objs if c.get("thresh_mm_6h") is not None]
         min_thresh = min(thresholds) if thresholds else 3.0
-        
+        waymo_active_cells = sum(1 for cid in cl if coll_by_id.get(cid, 0) > 0)
+
         sdays = sorted({d for c in comp_objs for d in (c.get("storm_days") or [])}, reverse=True)
         top_addrs = []
         for m in sorted(comp_objs, key=lambda x: (-int(x.get("n_storm_days", 0)), -int(x.get("n_reports", 0))))[:3]:
             if m.get("top_addresses"):
                 top_addrs.append(m["top_addresses"][0])
-                
+
         poly = build_padded_hull(cl, grid)
         hull_cells = cells_inside_polygon(poly, grid)
         sr, sc = _parse_cell_id(cl[0])
@@ -290,10 +357,11 @@ def _build_candidate_basins(
             "hist_storm_cell_days": sum(int(c.get("n_storm_days", 0)) for c in comp_objs),
             "max_storm_days": max_sd,
             "min_thresh_mm_6h": round(min_thresh, 1),
+            "waymo_active_cells": waymo_active_cells,
             "top_addresses": top_addrs or [cl[0]],
             "storm_days": sdays[:8],
         })
-        
+
     return basins
 
 
