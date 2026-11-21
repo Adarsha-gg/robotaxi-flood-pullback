@@ -13,7 +13,6 @@ import math
 import re
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -31,23 +30,29 @@ DEFAULT_GRID = {
 SF_CELLS = 4340  # ~121 km^2 SF land area / ~0.0279 km^2 per cell
 AREA_CAP_CELLS = int(0.08 * SF_CELLS)  # 347 cells = 8.0% of SF
 MAX_ZONES = 12
-TOP_N_CELLS = 60
+MIN_ANCHOR_STORM_DAYS = 10
+CORRIDOR_RADII = (1.5, 2.5, 3.5, 4.5)
+TOP_CANDIDATE_BASINS = 16
 
 DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 
 
 class ProposedZoneDraft(BaseModel):
     name: str = Field(description="Short human-readable neighborhood or intersection corridor name")
-    cells: list[str] = Field(description="Subset of provided cell IDs belonging to this tight corridor")
+    cluster_id: str = Field(
+        description="Exact single candidate cluster_id from the provided list (e.g. 'k1')"
+    )
     start: str = Field(description="Zone start time in naive local ISO format YYYY-MM-DDTHH:MM")
     end: str = Field(description="Zone end time in naive local ISO format YYYY-MM-DDTHH:MM")
     reason: str = Field(
-        description="Plain-language explanation referencing 24h total / 6h rain sums and citing at least one exact YYYY-MM-DD date from those cells' storm_days"
+        description="Plain-language explanation referencing 24h total / 6h rain sums and citing at least one exact YYYY-MM-DD date from that cluster's storm_days"
     )
 
 
 class ProposedPlanDraft(BaseModel):
-    zones: list[ProposedZoneDraft] = Field(description="Up to 12 tight, non-overlapping flood zones")
+    zones: list[ProposedZoneDraft] = Field(
+        description="List of 10 to 12 distinct flood zone objects, one per selected cluster_id"
+    )
 
 
 def _parse_cell_id(cid: str) -> tuple[int, int]:
@@ -116,7 +121,6 @@ def _point_in_polygon(lon: float, lat: float, poly: list[list[float]]) -> bool:
     for i in range(n - 1):
         x1, y1 = poly[i]
         x2, y2 = poly[i + 1]
-        # Bounding box quick check for on-edge
         if min(x1, x2) - eps <= lon <= max(x1, x2) + eps and min(y1, y2) - eps <= lat <= max(y1, y2) + eps:
             cross = abs((lon - x1) * (y2 - y1) - (lat - y1) * (x2 - x1))
             if cross <= eps * max(1.0, abs(x2 - x1) + abs(y2 - y1)):
@@ -189,16 +193,103 @@ def _clean_time(ts: str, date: str, fallback: str) -> str:
     return f"{date}T{hh:02d}:{mm:02d}"
 
 
-def _filter_spatial_outliers(cids: list[str], max_dist: float = 8.0) -> list[str]:
-    """Drop extreme spatial outliers from a zone's anchor cells so convex hulls stay tight."""
-    if len(cids) <= 2:
-        return cids
-    rc = {cid: _parse_cell_id(cid) for cid in cids}
-    rs = sorted(v[0] for v in rc.values())
-    cs = sorted(v[1] for v in rc.values())
-    med_r, med_c = rs[len(rs) // 2], cs[len(cs) // 2]
-    kept = [cid for cid in cids if math.hypot(rc[cid][0] - med_r, rc[cid][1] - med_c) <= max_dist]
-    return kept if kept else cids[:1]
+def _build_candidate_basins(
+    cell_list: list[dict[str, Any]],
+    grid: dict[str, float],
+) -> list[dict[str, Any]]:
+    """Deterministically build compact, high-density historical flood corridors from cells.json."""
+    if not cell_list:
+        return []
+
+    ranked = sorted(
+        cell_list,
+        key=lambda c: (-int(c.get("n_storm_days", 0)), -int(c.get("n_reports", 0))),
+    )
+    all_by_id = {c["id"]: c for c in ranked}
+    grid_rc = {c["id"]: _parse_cell_id(c["id"]) for c in ranked}
+    rc_to_id = {v: k for k, v in grid_rc.items()}
+
+    # Anchor corridors on chronic flood cells (n_storm_days >= 10), relaxing gracefully for small inputs
+    high = [c for c in ranked if int(c.get("n_storm_days", 0)) >= MIN_ANCHOR_STORM_DAYS]
+    if len(high) < 20:
+        high = ranked[: min(60, len(ranked))]
+    high_set = {c["id"] for c in high}
+
+    covered: set[str] = set()
+    basins: list[dict[str, Any]] = []
+
+    for _ in range(TOP_CANDIDATE_BASINS):
+        best = None
+        for ctr in high:
+            sr, sc = grid_rc[ctr["id"]]
+            for radius in CORRIDOR_RADII:
+                ri = int(math.ceil(radius))
+                members = []
+                for dr in range(-ri, ri + 1):
+                    for dc in range(-ri, ri + 1):
+                        if dr * dr + dc * dc <= radius * radius:
+                            cid = rc_to_id.get((sr + dr, sc + dc))
+                            if cid and cid in high_set and cid not in covered:
+                                members.append(cid)
+                if len(members) < 2 and len(high) >= 10:
+                    continue
+                if not members:
+                    continue
+                poly = build_padded_hull(members, grid)
+                hc = cells_inside_polygon(poly, grid)
+                new_hc = set(hc) - covered
+                if not new_hc:
+                    continue
+                # Keep primary candidates within area cap; allow extra candidates beyond 12 for Carbon to choose
+                if len(basins) < MAX_ZONES and len(covered) + len(new_hc) > AREA_CAP_CELLS:
+                    continue
+                gain_sd = sum(int(all_by_id[c].get("n_storm_days", 0)) for c in new_hc if c in all_by_id)
+                score = gain_sd * ((gain_sd / len(new_hc)) ** 0.7)
+                if best is None or score > best[0]:
+                    best = (score, ctr["id"], members, hc, gain_sd)
+        if best is None:
+            break
+
+        _, sid, members, hull_cells, gain_sd = best
+        covered.update(hull_cells)
+        sr, sc = grid_rc[sid]
+
+        known_in_hull = [all_by_id[c] for c in hull_cells if c in all_by_id]
+        reps = sum(int(c.get("n_reports", 0)) for c in known_in_hull)
+        max_sd = max((int(all_by_id[m].get("n_storm_days", 0)) for m in members), default=1)
+        thresholds = [
+            float(all_by_id[m]["thresh_mm_6h"])
+            for m in members
+            if all_by_id[m].get("thresh_mm_6h") is not None
+        ]
+        min_thresh = min(thresholds) if thresholds else 3.0
+        sdays = sorted(
+            {d for c in known_in_hull for d in (c.get("storm_days") or [])},
+            reverse=True,
+        )
+        top_addrs: list[str] = []
+        for m in sorted(members, key=lambda x: (-int(all_by_id[x].get("n_storm_days", 0)), -int(all_by_id[x].get("n_reports", 0))))[:3]:
+            addrs = all_by_id[m].get("top_addresses") or []
+            if addrs:
+                top_addrs.append(addrs[0])
+
+        basins.append({
+            "cluster_id": f"k{len(basins) + 1}",
+            "seed": sid,
+            "r": sr,
+            "c": sc,
+            "members": sorted(set(members)),
+            "hull_cells": sorted(set(hull_cells)),
+            "n_hull_cells": len(set(hull_cells)),
+            "n_reports": reps,
+            "hist_storm_cell_days": gain_sd,
+            "max_storm_days": max_sd,
+            "min_thresh_mm_6h": round(min_thresh, 1),
+            "top_addresses": top_addrs or [sid],
+            "storm_days": sdays[:8],
+        })
+
+    return basins
 
 
 def _score_zones_with_decision1(
@@ -255,7 +346,11 @@ def _score_zones_with_decision1(
     return scores
 
 
-def propose_zones(cells: list[dict[str, Any]] | dict[str, Any], forecast: dict[str, Any], date: str) -> dict[str, Any]:
+def propose_zones(
+    cells: list[dict[str, Any]] | dict[str, Any],
+    forecast: dict[str, Any],
+    date: str,
+) -> dict[str, Any]:
     """Generate up to 12 forecast-based flood zones for San Francisco.
 
     Args:
@@ -275,61 +370,56 @@ def propose_zones(cells: list[dict[str, Any]] | dict[str, Any], forecast: dict[s
 
     all_by_id = {c["id"]: c for c in cell_list}
 
-    # 1. Pre-rank top 60 cells by n_storm_days (tie-break by n_reports)
-    ranked = sorted(
-        cell_list,
-        key=lambda c: (-int(c.get("n_storm_days", 0)), -int(c.get("n_reports", 0))),
-    )
-    top_cells = ranked[:TOP_N_CELLS]
-    top_by_id = {c["id"]: c for c in top_cells}
+    # 1. Pre-cluster top historically flood-prone cells into compact candidate basins
+    basins = _build_candidate_basins(cell_list, grid)
+    basin_by_id = {b["cluster_id"]: b for b in basins}
 
     # 2. Compute 6-hour rolling sums and forecast summary
     hourly = _six_hour_sums(forecast.get("hours", []))
     total_mm = float(forecast.get("total_mm", sum(h["mm"] for h in hourly)))
     peak_6h = max((h["sum_6h_mm"] for h in hourly), default=0.0)
     peak_6h_t = max(hourly, key=lambda h: h["sum_6h_mm"])["t"] if hourly else f"{date}T12:00"
-    morning_6h = max((h["sum_6h_mm"] for h in hourly if h["t"][11:13] <= "14"), default=0.0)
+    daytime_6h = max((h["sum_6h_mm"] for h in hourly if h["t"][11:13] <= "15"), default=0.0)
 
-    compact_cells = []
-    for c in top_cells:
-        r, col = _parse_cell_id(c["id"])
-        compact_cells.append({
-            "id": c["id"],
-            "r": r,
-            "c": col,
-            "n_storm_days": c.get("n_storm_days", 0),
-            "n_reports": c.get("n_reports", 0),
-            "thresh_mm_6h": c.get("thresh_mm_6h"),
-            "addr": (c.get("top_addresses") or [c["id"]])[0],
-            "storm_days": (c.get("storm_days") or [])[:5],
-        })
+    compact_basins = [
+        {
+            "cluster_id": b["cluster_id"],
+            "r": b["r"],
+            "c": b["c"],
+            "hull_cells": b["n_hull_cells"],
+            "n_reports": b["n_reports"],
+            "max_storm_days": b["max_storm_days"],
+            "min_thresh_mm_6h": b["min_thresh_mm_6h"],
+            "landmarks": b["top_addresses"],
+            "storm_days": b["storm_days"][:5],
+        }
+        for b in basins
+    ]
 
     prompt = f"""You are a San Francisco street-flooding operations planner for an autonomous vehicle fleet.
 Date: {date}
 Forecast source: {forecast.get("source", "previous_day1")}
 Forecast 24-hour total rainfall: {total_mm:.1f} mm
 Forecast peak 6-hour rolling sum: {peak_6h:.1f} mm (at {peak_6h_t})
-Morning/midday (00:00-14:00) peak 6-hour rolling sum: {morning_6h:.1f} mm
+Daytime (00:00-15:00) peak 6-hour rolling sum: {daytime_6h:.1f} mm
 
 Hourly forecast with trailing 6-hour rolling sums (local America/Los_Angeles):
 {json.dumps(hourly, separators=(",", ":"))}
 
-Top {len(compact_cells)} historically flood-prone ~165m grid cells in San Francisco (strictly pre-{date} history; r=north-south row, c=west-east col):
-{json.dumps(compact_cells, separators=(",", ":"))}
+Top {len(compact_basins)} pre-clustered compact historical flood basins in San Francisco (strictly pre-{date} history; ranked by historical flood reports; total SF area = {SF_CELLS} cells):
+{json.dumps(compact_basins, separators=(",", ":"))}
 
 INSTRUCTIONS:
-1. Group these high-risk cells into AT MOST {MAX_ZONES} tight, compact neighborhood/corridor flood pull-back zones (aim for 8 to 12 zones covering the major flood-prone clusters).
-2. Spatial tightness is critical:
-   - Each zone's polygon will be built as the convex hull of its cells, padded by half a cell.
-   - Keep cells inside each zone spatially compact (adjacent or within ~6 grid cells of the zone's center) so polygons do NOT span dry hills or bloat citywide area above 8% of SF.
-   - Use ONLY cell IDs from the provided list above, and assign each cell to at most one zone.
-   - Cover as many of the 60 provided cells as fit cleanly into tight neighborhood corridors (e.g., Civic Center/Van Ness, Western Addition/Fillmore, Lower Haight/Panhandle, Pacific Heights/Marina, SoMa/Brannan, Noe/Mission, Bayview/Toland/Illinois, Alemany/San Bruno, Richmond/California, etc.).
+1. Select AT MOST {MAX_ZONES} flood pull-back zones from the candidate clusters above (each zone should use 1 `cluster_id`, and do NOT repeat a `cluster_id` across zones).
+2. Area budget (STRICT):
+   - Total `hull_cells` across all selected zones must stay <= {AREA_CAP_CELLS} cells (<= 8.0% of SF).
+   - Aim to use ~300 to 340 `hull_cells` (7.0%–7.8% of SF) across 11–12 highest-risk basins so the fleet avoids the highest-volume historical flood corridors without exceeding 8% of SF.
 3. Timing rule (CRITICAL):
-   - Reason from the 24-hour DAY TOTAL ({total_mm:.1f} mm) and 6-HOUR ROLLING SUMS, NOT single hourly spikes. Night-before forecasts get the storm day total and multi-hour rain waves right, even when single-hour timing shifts by a few hours.
-   - Set tight, operationally useful start/end windows (`YYYY-MM-DDTHH:MM` naive local time) around the main 6-hour rain wave(s) that exceed the zone's `thresh_mm_6h` (with ~1h lead and ~2h drainage tail). Avoid lazy all-day `01:00-23:59` windows unless a basin's low threshold is exceeded across both morning and late-evening waves.
-   - Make sure the main morning/midday wave (when 6h sums exceed thresholds) is covered cleanly.
+   - Reason from the 24-hour DAY TOTAL ({total_mm:.1f} mm) and 6-HOUR ROLLING SUMS, NOT single hourly spikes. Night-before forecasts get the storm day total and multi-hour rain waves right even if exact single-hour peaks shift by 1–3 hours.
+   - Set **tight, operationally useful time windows** (`YYYY-MM-DDTHH:MM`, naive local time) centered on the primary daytime 6-hour rain wave (when 6h rolling sums exceed each basin's `min_thresh_mm_6h`, typically starting ~1h before threshold crossing around `05:00`–`06:00` and ending ~2h after the daytime wave subsides around `14:00`–`16:00`).
+   - Do NOT use lazy all-day `01:00-23:59` or `05:00-23:59` windows! Keep windows tight (roughly 8 to 11 hours, e.g. `05:00`–`15:00` or `05:30`–`14:30` or `06:00`–`16:00`) so the fleet stays operational during the dry afternoon lull.
 4. Reason requirement:
-   - Write a crisp 1-2 sentence plain-language `reason` for each zone mentioning the 24h total or 6-hour forecast rainfall sum AND explicitly citing at least one exact historical storm date (`YYYY-MM-DD`) taken verbatim from those cells' `storm_days`.
+   - Write a crisp 1-2 sentence plain-language `reason` for each zone mentioning the 24h total or 6-hour forecast rainfall sum AND explicitly citing at least one exact historical storm date (`YYYY-MM-DD`) taken verbatim from that cluster's `storm_days`.
 """
 
     client = get_client()
@@ -339,46 +429,40 @@ INSTRUCTIONS:
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=ProposedPlanDraft,
+            thinking_config=types.ThinkingConfig(thinking_level="LOW"),
         ),
     )
 
     draft = ProposedPlanDraft.model_validate_json(response.text)
 
-    # 3. Post-process zones: validate cells, build padded convex hulls, expand cells inside hull, enforce <= 8% area
-    used_anchor_cells: set[str] = set()
+    # 3. Post-process zones: build padded convex hulls, expand cells inside hull, enforce <= 8% area
+    used_clusters: set[str] = set()
     zones: list[dict[str, Any]] = []
 
     for z_draft in draft.zones[:MAX_ZONES]:
-        valid_anchors = [
-            cid for cid in z_draft.cells
-            if cid in top_by_id and cid not in used_anchor_cells
-        ]
-        if not valid_anchors:
+        cid = z_draft.cluster_id.strip()
+        if cid not in basin_by_id or cid in used_clusters:
             continue
+        used_clusters.add(cid)
 
-        # Keep hulls tight by filtering extreme spatial outliers
-        tight_anchors = _filter_spatial_outliers(valid_anchors, max_dist=8.0)
-        used_anchor_cells.update(tight_anchors)
+        member_cells = sorted(set(basin_by_id[cid]["members"]))
 
-        poly = build_padded_hull(tight_anchors, grid)
-        # All grid cells physically inside the zone's padded convex hull
+        poly = build_padded_hull(member_cells, grid)
         hull_cells = cells_inside_polygon(poly, grid)
-        # Ensure all anchors are present and deduplicated
-        zone_cells = sorted(set(hull_cells) | set(tight_anchors))
+        zone_cells = sorted(set(hull_cells) | set(member_cells))
 
-        # Gather evidence from all known historical cells in this zone
-        known_cells = [all_by_id[cid] for cid in zone_cells if cid in all_by_id]
-        anchor_objs = [top_by_id[cid] for cid in tight_anchors]
+        known_cells = [all_by_id[c] for c in zone_cells if c in all_by_id]
+        member_objs = [all_by_id[c] for c in member_cells if c in all_by_id]
         n_reports = sum(int(c.get("n_reports", 0)) for c in known_cells)
         all_sdays = sorted(
             {d for c in known_cells for d in (c.get("storm_days") or [])},
             reverse=True,
         )
-        max_storm_days = max(int(c.get("n_storm_days", 0)) for c in anchor_objs)
-        thresholds = [float(c["thresh_mm_6h"]) for c in anchor_objs if c.get("thresh_mm_6h") is not None]
+        max_storm_days = max((int(c.get("n_storm_days", 0)) for c in member_objs), default=1)
+        thresholds = [float(c["thresh_mm_6h"]) for c in member_objs if c.get("thresh_mm_6h") is not None]
         min_thresh = min(thresholds) if thresholds else 3.0
 
-        # Ensure any valid date cited in reason is in evidence.storm_days[:10]
+        # Ensure every zone's reason cites at least one real date in evidence.storm_days
         reason = z_draft.reason.strip()
         cited_dates = [d for d in DATE_RE.findall(reason) if d in all_sdays]
         top_sdays = all_sdays[:10]
@@ -391,7 +475,7 @@ INSTRUCTIONS:
         start_t = _clean_time(z_draft.start, date, f"{date}T05:00")
         end_t = _clean_time(z_draft.end, date, f"{date}T15:00")
         if end_t <= start_t:
-            end_t = f"{date}T23:59"
+            end_t = f"{date}T16:00"
 
         zones.append({
             "id": "",
@@ -410,49 +494,31 @@ INSTRUCTIONS:
             "source": "forecast",
             "_max_storm_days": max_storm_days,
             "_min_thresh": min_thresh,
-            "_anchor_cells": tight_anchors,
-            "_rank": max_storm_days * 10000 + n_reports,
+            "_rank": n_reports * 100 + max_storm_days,
         })
 
     # Sort highest-risk zones first
     zones.sort(key=lambda z: -z["_rank"])
 
-    # Enforce <= 8.0% SF area cap (AREA_CAP_CELLS) by tightening hulls if ever exceeded
-    def _total_unique_cells(zs: list[dict[str, Any]]) -> int:
-        return len({cid for z in zs for cid in z["cells"]})
-
-    if _total_unique_cells(zones) > AREA_CAP_CELLS:
-        # Progressively tighten largest-area zones' outlier radius, or drop lowest-rank zone if needed
-        for max_d in (6.0, 5.0, 4.0):
-            if _total_unique_cells(zones) <= AREA_CAP_CELLS:
-                break
-            for z in sorted(zones, key=lambda x: -len(x["cells"])):
-                if _total_unique_cells(zones) <= AREA_CAP_CELLS:
-                    break
-                if len(z["cells"]) > 25:
-                    tight = _filter_spatial_outliers(z["_anchor_cells"], max_dist=max_d)
-                    poly = build_padded_hull(tight, grid)
-                    z["polygon"] = poly
-                    z["cells"] = sorted(set(cells_inside_polygon(poly, grid)) | set(tight))
-        while len(zones) > 1 and _total_unique_cells(zones) > AREA_CAP_CELLS:
-            zones.pop()
+    # Hard-enforce <= 8.0% SF area cap (AREA_CAP_CELLS = 347 unique cells)
+    while len(zones) > 1 and len({cid for z in zones for cid in z["cells"]}) > AREA_CAP_CELLS:
+        zones.pop()
 
     # Assign final z1..zN IDs
     for idx, z in enumerate(zones, 1):
         z["id"] = f"z{idx}"
 
-    # 4. Score p_flood per zone using Decision 1
+    # 4. Score p_flood per zone using Decision 1 in one fast call
     forecast_summary = (
         f"Date: {date}. Source: {forecast.get('source', 'previous_day1')}. "
         f"24h total rainfall: {total_mm:.1f} mm. "
-        f"Peak 6h rolling rainfall: {peak_6h:.1f} mm (morning/midday peak 6h: {morning_6h:.1f} mm)."
+        f"Peak 6h rolling rainfall: {peak_6h:.1f} mm (daytime peak 6h: {daytime_6h:.1f} mm)."
     )
     p_scores = _score_zones_with_decision1(zones, forecast_summary)
     for z in zones:
         z["p_flood"] = p_scores.get(z["id"], 0.75)
         del z["_max_storm_days"]
         del z["_min_thresh"]
-        del z["_anchor_cells"]
         del z["_rank"]
 
     return {
@@ -468,7 +534,6 @@ def _evaluate_against_events(plan_dict: dict[str, Any], events_path: Path) -> di
     events = json.loads(events_path.read_text())
     zones = plan_dict["zones"]
 
-    # Cell membership check (matching pipeline/baseline.py)
     cell_to_zones: dict[str, list[dict[str, Any]]] = {}
     for z in zones:
         for cid in z["cells"]:
@@ -484,7 +549,6 @@ def _evaluate_against_events(plan_dict: dict[str, Any], events_path: Path) -> di
             in_cell_anytime += 1
             if any(z["start"] <= t_min <= z["end"] for z in zs):
                 in_cell_active += 1
-        # Also verify point-in-polygon
         lon, lat = ev["lon"], ev["lat"]
         if any(
             z["start"] <= t_min <= z["end"] and _point_in_polygon(lon, lat, z["polygon"])
@@ -531,7 +595,6 @@ def main() -> None:
         f"poly area ~{poly_area_km2 / 121.0:.1%} of SF)"
     )
 
-    # Verify every reason cites at least one real storm_day
     all_cited = True
     for z in zones:
         sdays = set(z["evidence"]["storm_days"])
