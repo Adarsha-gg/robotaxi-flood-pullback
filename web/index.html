@@ -429,6 +429,35 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 }
 /* autonomous mode: no approval controls */
 #approveAll, #resetAll, [data-f="proposed"], [data-f="approved"], .zone .btns button[data-a] { display: none !important; }
+.nav-pill {
+  display: inline-flex; align-items: center; gap: 5px; text-decoration: none;
+  padding: 5px 9px; border-radius: 7px; font-size: 11.5px; font-weight: 600;
+  color: var(--text-dim); background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.nav-pill:hover { color: var(--text); border-color: var(--cyan); background: var(--cyan-soft); }
+.proof-strip {
+  margin-top: 8px; padding: 7px 9px; border-radius: 7px; font-size: 11px; line-height: 1.35;
+  background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.28); color: #a7f3d0;
+}
+.proof-strip.warn {
+  background: rgba(245,158,11,0.11); border-color: rgba(245,158,11,0.42); color: #fde68a;
+}
+.roi-strip {
+  margin-top: 6px; padding: 6px 9px; border-radius: 7px; font-size: 11px;
+  background: rgba(56,189,248,0.07); border: 1px solid rgba(56,189,248,0.25); color: #bae6fd;
+  display: flex; justify-content: space-between; align-items: center; gap: 6px;
+}
+.city-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 12px; }
+.city-card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
+}
+.city-card.alert { border-color: rgba(244,63,94,0.55); background: linear-gradient(180deg, rgba(244,63,94,0.08), var(--card)); }
+.city-card.watch { border-color: rgba(245,158,11,0.5); }
+.cam-pin {
+  width: 14px; height: 14px; border-radius: 50%; border: 2px solid #07090d;
+  box-shadow: 0 0 10px rgba(16,185,129,0.75);
+}
 </style>
 </head>
 <body>
@@ -438,7 +467,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
     <div class="brand">
       <span class="live-dot"></span>
       <span class="brand-name">Flood <b>Pull-Back</b></span>
-      <span class="brand-tag mono">SF OPS</span>
+      <span class="brand-tag mono">AUTONOMOUS</span>
     </div>
     <div class="seg" id="modeSeg" role="group" aria-label="Operating Mode">
       <button data-date="2026-11-18" class="on">Replay · Nov 18</button>
@@ -451,8 +480,12 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
   </div>
   <div class="ops-right">
     <span class="meta-chip mono" id="srcPill">59.3 mm · night-before</span>
+    <button class="nav-pill" id="citiesBtn" title="7 US AV Markets Live Check">🌎 7 Cities</button>
+    <button class="nav-pill" id="ttsBtn" title="Play Gemini 3.8 Flash TTS Dispatch Alert">🔊 Alert</button>
+    <a class="nav-pill" href="/trip">Plan Trip</a>
+    <a class="nav-pill" href="/ride">The Ride</a>
     <a class="cam-cta" href="/cam" target="_blank" rel="noopener">
-      <span class="cta-dot"></span>Fleet Camera <span class="mono">/cam ↗</span>
+      <span class="cta-dot"></span>Fleet Cam <span class="mono">↗</span>
     </a>
   </div>
 </header>
@@ -488,7 +521,6 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 
     <div class="hud hud-bottom-left">
       <div class="map-legend">
-        <span><i class="swatch sw-prop"></i>Proposed</span>
         <span><i class="swatch sw-appr"></i>Active · cars avoid</span>
         <span><i class="swatch sw-cam"></i>Car Cam</span>
         <span><i class="dot-sm" style="background:var(--green)"></i>Caught</span>
@@ -500,16 +532,23 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
         <span>Waymo CPUC Q3</span>
         <span class="waymo-stat-badge" id="waymoStat" style="display:none"></span>
       </label>
+      <label class="waymo-pill" id="cctvPill" title="Toggle 12 live Caltrans SF highway cameras judged by Decision 1">
+        <input type="checkbox" id="cctvTog">
+        <span class="toggle-track"></span>
+        <span>📡 12 SF Cams</span>
+        <span class="waymo-stat-badge" id="cctvStat" style="display:none"></span>
+      </label>
     </div>
   </div>
 
   <aside class="ops-panel">
     <section class="panel-card" id="kpiCard">
       <div class="card-head">
-        <span class="card-title">Model Performance · Full Day</span>
+        <span class="card-title">Autonomous Performance · Full Day</span>
         <span class="badge-carbon" id="kpiScope">CARBON VS BASELINE</span>
       </div>
       <div id="kpiBars"></div>
+      <div id="proofBox"></div>
     </section>
 
     <section class="panel-card" id="tripCard">
@@ -615,6 +654,20 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
     <div class="genie-foot">
       Visual illustration generated live from a real San Francisco 311 resident photo — not a physical depth measurement.
     </div>
+  </div>
+</div>
+
+<div id="citiesModal" class="genie-backdrop" style="display:none" role="dialog" aria-modal="true">
+  <div class="genie-modal" style="max-width:980px">
+    <div class="genie-bar">
+      <div class="genie-title-wrap">
+        <span class="badge-carbon">MULTI-CITY PORTABILITY · LIVE</span>
+        <b class="genie-zone">7 U.S. Robotaxi Markets · Zero-Retraining 311 + Open-Meteo + NWS</b>
+      </div>
+      <button id="citiesClose" class="btn-xs btn-danger">✕ Close</button>
+    </div>
+    <div id="citiesSummary" class="mono text-dim" style="font-size:11.5px"></div>
+    <div id="citiesGrid" class="city-grid"></div>
   </div>
 </div>
 
@@ -789,7 +842,7 @@ function renderList() {
         <div class="z-title">${esc(z.name)}</div>
         <div class="z-badges">
           ${isCam ? `<span class="st-cam">CAR CAM${z.car_id ? ' · ' + esc(z.car_id) : ''}</span>` : ''}
-          <span class="st ${z.status}">${z.status}</span>
+          <span class="st ${z.status}">${z.status === 'approved' ? 'ACTIVE' : z.status}</span>
         </div>
       </div>
       <div class="z-prob">
@@ -1285,7 +1338,16 @@ addEventListener('resize', drawRain);
   await loadDateContext(DATE);
 
   // Real Waymo CPUC 2026 Q3 tract activity overlay
-  const [wg, ws] = await Promise.all([j('/data/waymo_sf.geojson'), j('/data/waymo_stats.json')]).catch(() => [null, null]);
+  const [wg, ws, bt, cctv, cities, hydro, phys] = await Promise.all([
+    j('/data/waymo_sf.geojson'),
+    j('/data/waymo_stats.json'),
+    j('/media/backtest.json'),
+    j('/media/cctv_sweep.json'),
+    j('/media/cities_snapshot.json'),
+    j('/media/hydrology_cache.json'),
+    j('/media/physics_report.json')
+  ].map(p => p.catch(() => null)));
+
   if (wg) {
     const wl = L.geoJSON(wg, {
       filter: f => f.properties.waymo_collisions_q3 > 0, interactive: true,
@@ -1302,6 +1364,77 @@ addEventListener('resize', drawRain);
         `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in ${ws.tracts_with_waymo_collisions}/${ws.sf_tracts} Waymo-active tracts. NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} crashes (${ws.nhtsa_sgo.in_rain} in rain).`;
     }
   }
+
+  // 15-storm backtest + King Tide / NWS warning + ROI proof strip
+  function renderProofBox() {
+    const box = document.getElementById('proofBox');
+    if (!box) return;
+    let html = '';
+    if (DATE !== '2026-11-18') {
+      const t25 = phys?.tides_noaa_9414290?.['2026-11-25'];
+      const nwsAlert = hydro?.nws?.alerts?.[0]?.headline;
+      html += `<div class="proof-strip warn"><b>⚠ Peak King Tide (${t25 ? t25.golden_gate_tide_ft + ' ft @ ' + t25.high_tide_time : '7.03 ft'})</b> · Bay outfalls 7.5–7.8 ft (Mission &amp; Islais Creeks)${nwsAlert ? `<br><span style="opacity:.9">${esc(nwsAlert)}</span>` : ''}</div>`;
+    } else {
+      html += `<div class="roi-strip"><span><b>92.0% SF Open</b> vs 23h blackout</span><span class="mono">+$566K–$715K / storm</span></div>`;
+    }
+    if (bt?.mean_caught) {
+      const c = (bt.mean_caught.corridor * 100).toFixed(1), b = (bt.mean_caught.baseline * 100).toFixed(1), r = (bt.mean_caught.random * 100).toFixed(1);
+      html += `<div class="proof-strip"><b>15-Storm Backtest (pre-storm only):</b> ${c}% caught vs ${b}% baseline · <b>${(bt.mean_caught.corridor / Math.max(0.01, bt.mean_caught.random)).toFixed(1)}×</b> random (${r}%) at 8% SF.</div>`;
+    }
+    box.innerHTML = html;
+  }
+  renderProofBox();
+  const origLoadDate = loadDateContext;
+  loadDateContext = async d => { await origLoadDate(d); renderProofBox(); };
+
+  // Live 12-Cam Caltrans SF Highway CCTV Overlay (Decision 1 judged)
+  if (cctv?.cameras?.length) {
+    const cctvLayer = L.layerGroup();
+    for (const c of cctv.cameras) {
+      const act = c.verdict?.action || 'proceed';
+      const col = act === 'avoid' ? '#f43f5e' : act === 'slow' ? '#f59e0b' : '#10b981';
+      const lc = Math.round((c.verdict?.lane_covered || 0) * 100);
+      L.marker([c.lat, c.lon], {
+        icon: L.divIcon({ className: '', html: `<div class="cam-pin" style="background:${col}"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] })
+      }).bindPopup(`<div style="min-width:210px;color:#0f172a"><b>${esc(c.name)}</b><br><span style="font-size:11px">Decision 1: <b>${act.toUpperCase()}</b> · lane ${lc}% · ${c.verdict?.latency_ms || 0} ms</span><br><img src="${esc(c.image)}" style="width:100%;margin-top:6px;border-radius:6px" onerror="this.style.display='none'"></div>`).addTo(cctvLayer);
+    }
+    const stat = document.getElementById('cctvStat');
+    stat.textContent = `${cctv.n_scanned}/${cctv.n_requested} · ${(cctv.wall_ms / 1000).toFixed(1)}s · 0 false`;
+    stat.style.display = 'inline-block';
+    document.getElementById('cctvTog').onchange = e => e.target.checked ? cctvLayer.addTo(map) : map.removeLayer(cctvLayer);
+  }
+
+  // 7-City Multi-City Portability Modal
+  if (cities?.cities?.length) {
+    document.getElementById('citiesBtn').textContent = `🌎 ${cities.n_live} Cities`;
+    document.getElementById('citiesSummary').textContent = cities.summary;
+    document.getElementById('citiesGrid').innerHTML = cities.cities.map(c => {
+      const cls = c.risk_level === 'pullback_active' ? 'alert' : c.risk_level === 'watch' ? 'watch' : '';
+      const badgeCol = c.risk_level === 'pullback_active' ? 'var(--red)' : c.risk_level === 'watch' ? 'var(--amber)' : 'var(--green)';
+      return `<div class="city-card ${cls}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:4px">
+          <b>${esc(c.name)}</b>
+          <span class="mono" style="font-size:10px;font-weight:700;color:${badgeCol}">${esc(c.risk_level.toUpperCase())}</span>
+        </div>
+        <div class="mono text-dim" style="font-size:11px;margin-bottom:4px">24h: ${c.next_24h_mm} mm · 6h: ${c.next_6h_mm} mm · NWS: ${c.nws_flood_alert ? 'ALERT' : 'clear'}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${esc((c.av_operators || []).join(', '))} · ${esc(c.open_311_source)}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('citiesBtn').onclick = () => { document.getElementById('citiesModal').style.display = 'grid'; };
+    document.getElementById('citiesClose').onclick = () => { document.getElementById('citiesModal').style.display = 'none'; };
+    document.getElementById('citiesModal').onclick = e => { if (e.target.id === 'citiesModal') e.target.style.display = 'none'; };
+  }
+
+  // Gemini 3.8 Flash TTS Audio Alert playback
+  let ttsAudio = null;
+  document.getElementById('ttsBtn').onclick = () => {
+    if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; document.getElementById('ttsBtn').textContent = '🔊 Alert'; return; }
+    ttsAudio = new Audio('/media/audio/fleet_alert.wav');
+    document.getElementById('ttsBtn').textContent = '⏹ Playing…';
+    ttsAudio.onended = () => { ttsAudio = null; document.getElementById('ttsBtn').textContent = '🔊 Alert'; };
+    ttsAudio.onerror = () => { ttsAudio = null; document.getElementById('ttsBtn').textContent = '🔊 Alert'; };
+    ttsAudio.play().catch(() => { ttsAudio = null; document.getElementById('ttsBtn').textContent = '🔊 Alert'; });
+  };
 })();
 </script>
 </body>

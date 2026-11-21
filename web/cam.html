@@ -197,9 +197,13 @@ video, #still { width: 100%; height: 100%; object-fit: cover; display: block; }
   <div class="ops-left">
     <span class="live-dot"></span>
     <span class="brand-name">Fleet <b>Camera</b></span>
-    <span class="brand-sub">Every robotaxi is a flood sensor · Decision 1 → Antigravity Managed Agent → Fleet ODD</span>
+    <span class="brand-sub">Autonomous flood sensor · Decision 1 → Antigravity Managed Agent → Fleet ODD</span>
   </div>
-  <a class="map-link" href="/" target="_blank" rel="noopener">← Open Fleet Map ↗</a>
+  <div style="display:flex;gap:8px;align-items:center">
+    <a class="map-link" href="/trip">Plan Trip</a>
+    <a class="map-link" href="/ride">The Ride</a>
+    <a class="map-link" href="/" target="_blank" rel="noopener">← City Ops Map ↗</a>
+  </div>
 </header>
 
 <main>
@@ -407,10 +411,15 @@ async function send() {
 }
 
 function summarizeStep(s) {
-  const a = s.args || {};
+  const a = s.args || {}, res = s.result || {};
   if (s.tool === 'get_cell_history') return `Inspected pre-storm 311 history & 3×3 neighbors for cell <b>${esc(a.cell)}</b>`;
   if (s.tool === 'get_forecast') return `Checked hourly rain curve & remaining precipitation for <b>${esc(a.date)}</b>`;
-  if (s.tool === 'propose_zone') return `Published <b>${(a.cells || []).length}-cell</b> Dynamic ODD closure (${esc(String(a.start || '').slice(11, 16))}–${esc(String(a.end || '').slice(11, 16))})`;
+  if (s.tool === 'estimate_fleet_detour') {
+    const mins = res.avg_added_min != null ? `+${res.avg_added_min} min` : 'evaluated';
+    return `Simulated Valhalla fleet detour cost (<b>${esc(mins)}</b>, ${esc(res.recommendation || 'balanced')}) across <b>${(a.cells || []).length}</b> candidate cells`;
+  }
+  if (s.tool === 'propose_zone') return `Published <b>${(a.cells || []).length}-cell</b> autonomous ODD closure (${esc(String(a.start || '').slice(11, 16))}–${esc(String(a.end || '').slice(11, 16))})`;
+  if (s.tool === 'check_reopen' || s.tool === 'reopen_zone') return `Evaluated 2-frame clear-to-reopen hysteresis (<b>${esc(a.action || res.action || 'checked')}</b>)`;
   if (s.tool === 'judge_frame') return `Verified roadway frame via Decision 1`;
   return esc(JSON.stringify(a).slice(0, 180));
 }
@@ -426,7 +435,12 @@ async function pollInc() {
     : i.status === 'zone_added'
       ? `✓ Fleet corridor closed in ${i.agent_s}s`
       : i.status;
-  let html = `<div class="agent-status ${statusCls}"><span>${statusTxt}</span><span class="mono" style="opacity:.8">${esc(i.verdict.car_id)} · ${esc(i.verdict.cell)}</span></div>`;
+  const engineTag = i.zone?.agent_engine ? ` · ${esc(i.zone.agent_engine)}` : '';
+  const interTag = i.zone?.interaction_id ? ` · id:${esc(String(i.zone.interaction_id).slice(0, 12))}` : '';
+  let html = `<div class="agent-status ${statusCls}"><span>${statusTxt}</span><span class="mono" style="opacity:.8">${esc(i.verdict.car_id)} · ${esc(i.verdict.cell)}${engineTag}${interTag}</span></div>`;
+  if (i.zone?.thought_summary) {
+    html += `<div class="muted" style="padding:4px 8px;border-left:2px solid var(--amber);color:#fde68a">Agent reasoning: ${esc(i.zone.thought_summary)}</div>`;
+  }
   if ((i.steps || []).length) {
     html += `<div class="timeline">` + i.steps.map((s, idx) =>
       `<div class="t-step"><div class="t-step-head"><span class="t-tool">${idx + 1}. ${esc(s.tool)}()</span><span class="t-ok">✓ OK</span></div><div class="t-body">${summarizeStep(s)}</div></div>`
