@@ -620,6 +620,18 @@ def record_cache(watch: dict, warning: dict, seconds: float = 6.0) -> dict[str, 
         )
 
 
+def judge_live_session(session: Any) -> dict[str, Any]:
+    """Judge the latest live frame from an active GenieSession via CAR_QUESTIONS. Never raises."""
+    try:
+        frame = getattr(session, "frame", None)
+        if not frame:
+            return {**_empty_frame_verdict(), "ok": False, "error": "no frame yet"}
+        verdict = judge_sim_frame(bytes(frame))
+        return {**verdict, "ok": verdict.get("lane_covered") is not None, "frame_no": getattr(session, "frame_no", 0)}
+    except Exception as exc:
+        return {**_empty_frame_verdict(), "ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def review_clip(path: str) -> dict[str, Any]:
     """Offline Hydrogen review of a simulated clip (G13 stretch). Never raises."""
     t0 = time.perf_counter()

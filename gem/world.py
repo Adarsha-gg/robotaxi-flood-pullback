@@ -19,6 +19,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RENDERS = os.path.join(ROOT, "media", "renders")
 KEYS = {"key_w", "key_a", "key_s", "key_d", "arrow_up", "arrow_down", "arrow_left", "arrow_right", "space", "key_e"}
 
+WEATHER_PRESETS = {
+    "downpour": "Intensify the rain into a heavy San Francisco downpour with sheets of water on the windshield and wet glare across the travel lane.",
+    "surge": "Raise the standing runoff water across the travel lane to over the tire sidewall, hiding the curb and lane lines as passing cars send up high wakes.",
+    "night_glare": "Shift to dark evening storm lighting with headlights and brake lights reflecting brightly off flooded black asphalt.",
+    "draining": "Ease the rain to a light drizzle as storm drains clear and the travel lane dries back down to shallow damp pavement with visible lane markings.",
+}
+
 DEFAULT_PROMPT = ("Street-level view from a driverless robotaxi in San Francisco during the 2026-11-18 storm. "
                   "Heavy rain, runoff flooding the roadway and rising toward the curb. Keep the real street from the "
                   "reference photo. The car drives slowly and carefully.")
@@ -50,6 +57,15 @@ class GenieSession:
         if self._loop and self._queue:
             self._loop.call_soon_threadsafe(self._queue.put_nowait,
                                             {"event_type": "user_action", "action": action, "input": key})
+
+    def send_text(self, text: str) -> str:
+        """Steer an active Genie 4 world mid-stream via text prompt (preset key or free text)."""
+        clean = WEATHER_PRESETS.get((text or "").strip().lower(), (text or "").strip())
+        if not clean:
+            raise ValueError("empty text prompt")
+        if self._loop and self._queue:
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, clean)
+        return clean
 
     def stop(self):
         self._stop.set()
@@ -154,7 +170,11 @@ class GenieSession:
     async def _send_loop(self, conn):
         while True:
             msg = await self._queue.get()
-            await conn.send(msg)
+            try:
+                await conn.send(msg)
+            except Exception:
+                # Never drop the live video stream if a mid-stream steer message fails
+                pass
 
 
 def render_flood(lat: float, lon: float, jpeg: bytes | None, seconds: float = 8.0,
