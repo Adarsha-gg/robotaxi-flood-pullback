@@ -123,8 +123,8 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 }
 .hud-telemetry { top: 14px; left: 14px; display: flex; align-items: center; gap: 14px; padding: 9px 14px; }
 .tel-item { display: flex; flex-direction: column; gap: 1px; }
-.tel-lbl { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase; }
-.tel-val { font-size: 16px; font-weight: 700; line-height: 1.15; color: var(--text); }
+.tel-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; color: var(--text-dim); text-transform: uppercase; }
+.tel-val { font-size: 17px; font-weight: 700; line-height: 1.15; color: var(--text); }
 .tel-div { width: 1px; height: 24px; background: var(--border); }
 .text-green { color: var(--green) !important; }
 .text-red { color: var(--red) !important; }
@@ -133,7 +133,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 .text-dim { color: var(--text-dim); }
 
 .hud-toast {
-  display: none; position: absolute; top: 14px; right: 14px; z-index: 650;
+  display: none; position: absolute; top: 72px; left: 14px; z-index: 650;
   max-width: 440px; padding: 10px 14px; border-radius: var(--radius-md);
   background: rgba(45, 12, 20, 0.92); backdrop-filter: blur(12px);
   border: 1px solid rgba(244, 63, 94, 0.7); color: #ffe4e6;
@@ -147,8 +147,12 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
 @keyframes toastIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
 .hud-bottom-left {
-  bottom: 14px; left: 14px; display: flex; align-items: center; gap: 12px;
-  padding: 7px 12px; flex-wrap: wrap;
+  bottom: 14px; left: 14px; display: flex; align-items: center; gap: 10px;
+  padding: 7px 11px; flex-wrap: wrap; max-width: calc(100% - 76px);
+}
+.waymo-stat-badge {
+  font: 600 10px/1 var(--font-mono); padding: 2px 6px; border-radius: 99px;
+  background: var(--cyan-soft); color: var(--cyan); border: 1px solid rgba(56,189,248,0.35);
 }
 .map-legend { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
 .map-legend span { display: inline-flex; align-items: center; gap: 5px; }
@@ -491,7 +495,8 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
       <label class="waymo-pill" id="waymoPill">
         <input type="checkbox" id="waymoTog" checked>
         <span class="toggle-track"></span>
-        <span>Waymo CPUC Q3 Activity</span>
+        <span>Waymo CPUC Q3</span>
+        <span class="waymo-stat-badge" id="waymoStat" style="display:none"></span>
       </label>
     </div>
   </div>
@@ -559,8 +564,8 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0
     <div id="rainTip" class="rain-tip mono"></div>
     <canvas id="rain"></canvas>
     <div class="deck-legend">
-      <span><i class="dot-sm" style="background:var(--amber)"></i>Night-before forecast (zone input)</span>
-      <span><i class="dot-sm" style="background:var(--cyan)"></i>Latest forecast</span>
+      <span><i class="dot-sm" style="background:var(--amber)"></i><span id="legNight">Night-before forecast (zone input)</span></span>
+      <span id="legLatestWrap"><i class="dot-sm" style="background:var(--cyan)"></i>Latest forecast</span>
       <span class="mono" style="margin-left:auto;opacity:.75">Click or drag chart to scrub</span>
     </div>
   </div>
@@ -845,32 +850,36 @@ async function loadScore() {
   if (!results.length || results[0].r.n_events === 0) {
     document.getElementById('kpiScope').textContent = 'LIVE FORECAST';
     const r0 = results[0]?.r;
+    const appr = zones.filter(z => z.status === 'approved').length;
+    const rej = zones.filter(z => z.status === 'rejected').length;
     const nz = r0 ? r0.if_all_approved.n_zones : zones.length;
-    const area = r0 ? Math.round((r0.if_all_approved.zone_area_pct || 0) * 100) : '–';
+    const area = r0 ? ((r0.if_all_approved.zone_area_pct || 0) * 100).toFixed(1) : '–';
     el.innerHTML = `<div class="kpi-model highlight">
       <div class="kpi-model-head">
         <span>Gemini 4 Carbon</span>
-        <span class="mono text-cyan">${nz} zones · ${area}% SF</span>
+        <span class="mono text-cyan">${appr}/${nz} approved · ${area}% SF</span>
       </div>
-      <div style="font-size:11.5px;color:var(--text-dim)">Live forecast for ${DATE} (${fcNight ? fcNight.total_mm + ' mm' : ''}). Zones await ops approval before the storm arrives.</div>
+      <div style="font-size:11.5px;color:var(--text-dim)">Live forecast for ${DATE} (${fcNight ? fcNight.total_mm + ' mm' : ''})${rej ? ` · ${rej} rejected` : ''}. Approve corridors before the storm arrives.</div>
     </div>`;
     return;
   }
   document.getElementById('kpiScope').textContent = 'CARBON VS BASELINE';
   el.innerHTML = results.map(({ key, r }) => {
-    const useAppr = r.n_zones > 0 && r.n_zones >= (r.if_all_approved?.n_zones ? 2 : 1);
+    const useAppr = r.n_zones > 0;
     const m = useAppr ? r : r.if_all_approved;
     const caughtPct = m.pct_in_zone != null ? Math.round(m.pct_in_zone * 100) : 0;
+    const allPct = r.if_all_approved?.pct_in_zone != null ? Math.round(r.if_all_approved.pct_in_zone * 100) : null;
     const areaPct = m.zone_area_pct != null ? (m.zone_area_pct * 100).toFixed(1) : '0.0';
     const isCarbon = key === 'carbon';
+    const showAllNote = useAppr && allPct != null && r.n_zones !== r.if_all_approved.n_zones;
     return `<div class="kpi-model ${isCarbon ? 'highlight' : ''}">
       <div class="kpi-model-head">
-        <span>${isCarbon ? 'Gemini 4 Carbon' : 'Baseline'} <span class="mono" style="font-size:10px;color:var(--text-muted)">· ${useAppr ? 'approved' : 'all proposed'}</span></span>
+        <span>${isCarbon ? 'Gemini 4 Carbon' : 'Baseline'} <span class="mono" style="font-size:10px;color:var(--text-muted)">· ${useAppr ? `${r.n_zones} approved` : 'all proposed'}</span></span>
         <span class="mono" style="font-size:11px;color:${isCarbon ? 'var(--cyan)' : 'var(--text-dim)'}">${m.n_zones} zones · ${m.median_lead_min != null ? (m.median_lead_min / 60).toFixed(1) + 'h lead' : '–'}</span>
       </div>
       <div class="kpi-metrics">
         <div class="kpi-bar-row">
-          <div class="kpi-bar-top"><span>Floods caught</span><b>${caughtPct}%</b></div>
+          <div class="kpi-bar-top"><span>Floods caught${showAllNote ? ` (all: ${allPct}%)` : ''}</span><b>${caughtPct}%</b></div>
           <div class="track"><div class="fill" style="width:${caughtPct}%;background:${isCarbon ? 'var(--green)' : '#64748b'}"></div></div>
         </div>
         <div class="kpi-bar-row">
@@ -961,7 +970,9 @@ function drawRain() {
   g.setLineDash([]);
 
   g.fillStyle = '#64748b'; g.font = '10px "JetBrains Mono", monospace';
-  g.fillText(`${Math.ceil(max)} mm`, W - 36, 10);
+  g.textAlign = 'right';
+  g.fillText(`${Math.ceil(max)} mm`, W - 4, 10);
+  g.textAlign = 'left';
 
   const bar = (x, y, w, h, col) => {
     if (h < 1) return;
@@ -1041,24 +1052,27 @@ document.querySelectorAll('#chapters button').forEach(b => b.onclick = () => {
   if (tripLayer.getLayers().length) routeTrip();
 });
 
-/* ---- Live Camera Zones Polling (with Smart Bounds + Clean Banner Reset) ---- */
+/* ---- Live Camera Zones Polling (handles adds AND resets cleanly) ---- */
 let camN = -1;
 setInterval(async () => {
   const z = await j(`/api/zones?date=${DATE}&set=${SET}`).catch(() => null);
   if (!z) return;
   const cams = (z.zones || []).filter(x => x.source === 'camera');
-  if (camN >= 0 && cams.length > camN) {
-    const nz = cams[cams.length - 1];
+  if (camN >= 0 && cams.length !== camN) {
+    const added = cams.length > camN;
     zones = z.zones;
     drawZones(); renderList(); update(true); loadScore();
-    select(nz.id, { noZoom: tripLayer.getLayers().length > 0, maxZoom: 13 });
-    const bn = document.getElementById('banner');
-    camToastActive = true;
-    bn.classList.add('cam-toast');
-    bn.textContent = `${nz.car_id || 'Fleet car'} saw water (${Math.round((nz.flooded_p || 0) * 100)}%) → Managed Agent closed ${nz.name}`;
-    bn.style.display = 'block';
-    clearTimeout(camToastTimer);
-    camToastTimer = setTimeout(() => { camToastActive = false; bn.style.display = 'none'; bn.textContent = ''; update(false); }, 8000);
+    if (added) {
+      const nz = cams[cams.length - 1];
+      select(nz.id, { noZoom: tripLayer.getLayers().length > 0, maxZoom: 13 });
+      const bn = document.getElementById('banner');
+      camToastActive = true;
+      bn.classList.add('cam-toast');
+      bn.textContent = `${nz.car_id || 'Fleet car'} saw water (${Math.round((nz.flooded_p || 0) * 100)}%) → Managed Agent closed ${nz.name}`;
+      bn.style.display = 'block';
+      clearTimeout(camToastTimer);
+      camToastTimer = setTimeout(() => { camToastActive = false; bn.style.display = 'none'; bn.textContent = ''; update(true); }, 8000);
+    }
     if (tripLayer.getLayers().length) routeTrip();
   }
   camN = cams.length;
@@ -1074,6 +1088,10 @@ const setCap = (k, on) => document.querySelector(`.keycap[data-k="${CAP_ALIAS[k]
 async function openGenie(zoneId) {
   const el = document.getElementById('genie');
   el.style.display = 'grid'; gOpen = true;
+  document.getElementById('gPhoto').src = '';
+  document.getElementById('gLive').src = '';
+  document.getElementById('gZone').textContent = '–';
+  document.getElementById('gWhen').textContent = '–';
   document.getElementById('gBadgeTxt').textContent = 'GENIE 4 · STARTING';
   document.getElementById('gStatus').textContent = 'Launching live Genie 4 world from 311 photo…';
   const r = await post('/api/genie/start', { date: DATE, set: SET, zone_id: zoneId, max_seconds: 60 }).catch(e => ({ error: String(e) }));
@@ -1141,13 +1159,15 @@ const PRESETS = {
   stanyan: { from: [37.7715, -122.4545], to: [37.7840, -122.4010] },
   noe:     { from: [37.7502, -122.4337], to: [37.7840, -122.4010] }
 };
-let trip = { ...PRESETS.stanyan }, picking = 0;
+let trip = { ...PRESETS.stanyan }, picking = 0, routeSeq = 0;
 
 async function routeTrip() {
+  const seq = ++routeSeq;
   const info = document.getElementById('tripInfo');
   info.innerHTML = `<span class="text-dim mono">Routing via Valhalla…</span>`;
   const t = `${DATE}T${fmt(Math.floor(clock))}`;
   const r = await post('/api/route', { date: DATE, set: SET, from: trip.from, to: trip.to, t }).catch(e => ({ error: String(e) }));
+  if (seq !== routeSeq) return;
   tripLayer.clearLayers();
   if (r.error) { info.innerHTML = `<span class="text-red">Route failed: ${esc(r.error)}</span>`; return; }
   L.polyline(r.default.coords, { color: '#f43f5e', weight: 4.5, opacity: 0.85, dashArray: '8 6' }).addTo(tripLayer);
@@ -1155,8 +1175,12 @@ async function routeTrip() {
   L.circleMarker(trip.from, { radius: 7, color: '#fff', weight: 2, fillColor: '#38bdf8', fillOpacity: 1 }).bindTooltip('Pickup').addTo(tripLayer);
   L.circleMarker(trip.to, { radius: 7, color: '#fff', weight: 2, fillColor: '#10b981', fillOpacity: 1 }).bindTooltip('Drop-off').addTo(tripLayer);
   const sign = r.added_min >= 0 ? '+' : '';
+  const hasBlocks = r.default.flood_cells != null && r.safe.flood_cells != null;
+  const defN = hasBlocks ? r.default.flood_cells : (r.default.hits_zones?.length ?? 0);
+  const safeN = hasBlocks ? r.safe.flood_cells : (r.safe.hits_zones?.length ?? 0);
+  const unit = hasBlocks ? 'flood blocks' : 'flood zones';
   info.innerHTML = `<div class="trip-badge-row">
-      <span class="trip-blocks"><span class="text-red">${r.default.flood_cells ?? '?'}</span> → <span class="text-green">${r.safe.flood_cells ?? '?'}</span> flood blocks</span>
+      <span class="trip-blocks"><span class="text-red">${defN}</span> → <span class="text-green">${safeN}</span> ${unit}</span>
       <span class="trip-delta">${sign}${r.added_min} min (${r.safe.min}m vs ${r.default.min}m)</span>
     </div>
     <div class="trip-sub mono">${r.active_zones} active approved zones · ${esc(r.router)}</div>`;
@@ -1193,20 +1217,35 @@ document.querySelectorAll('#zoneFilters button').forEach(b => b.onclick = () => 
   document.querySelectorAll('#zoneFilters button').forEach(x => x.classList.toggle('on', x === b));
   renderList();
 });
-document.querySelectorAll('#setSeg button').forEach(b => b.onclick = () => {
+document.querySelectorAll('#setSeg button').forEach(b => b.onclick = async () => {
   if (b.disabled) return;
   SET = b.dataset.set;
   history.replaceState(null, '', `?date=${DATE}&set=${SET}`);
-  loadZones();
+  await loadZones();
+  if (tripLayer.getLayers().length) routeTrip();
 });
+
+const CHAPTERS_REPLAY = [[360, '06:00 Pre-dawn'], [540, '09:00 Cloudburst'], [600, '10:00 Peak'], [660, '11:00 Waymo Pause']];
+const CHAPTERS_LIVE   = [[300, '05:00 Onset'], [360, '06:00 Peak'], [480, '08:00 Taper'], [780, '13:00 Clear']];
+function renderChapters(isLive) {
+  const list = isLive ? CHAPTERS_LIVE : CHAPTERS_REPLAY;
+  const wrap = document.getElementById('chapters');
+  wrap.innerHTML = list.map(([m, lbl]) => `<button data-min="${m}">${lbl}</button>`).join('');
+  wrap.querySelectorAll('button').forEach(b => b.onclick = () => {
+    playing = false; document.getElementById('play').textContent = '▶';
+    clock = +b.dataset.min; update();
+    if (tripLayer.getLayers().length) routeTrip();
+  });
+}
 
 async function loadDateContext(newDate) {
   DATE = newDate;
+  const isLive = DATE !== '2026-11-18';
+  if (isLive) SET = 'carbon';
   history.replaceState(null, '', `?date=${DATE}&set=${SET}`);
   playing = false; document.getElementById('play').textContent = '▶';
   clock = T0; lastRenderedMin = -1; selected = null; camN = -1;
   evLayer.clearLayers(); tripLayer.clearLayers();
-  const isLive = DATE !== '2026-11-18';
   document.querySelectorAll('#modeSeg button').forEach(b => {
     const match = b.dataset.date === DATE;
     b.classList.toggle('on', match && !isLive);
@@ -1214,14 +1253,16 @@ async function loadDateContext(newDate) {
   });
   const baseBtn = document.getElementById('baseSetBtn');
   baseBtn.disabled = isLive;
-  if (isLive) SET = 'carbon';
+  renderChapters(isLive);
   document.getElementById('clockDate').textContent = isLive ? `${DATE.slice(5)} · LIVE` : 'NOV 18 · PST';
   events = await j(`/data/events_${DATE}.json`).catch(() => []);
-  fcNight = await j(`/data/forecast_${DATE}.json`);
+  fcNight = await j(`/data/forecast_${DATE}.json`).catch(() => null);
   fcLatest = await j(`/data/forecast_${DATE}_latest.json`).catch(() => null);
-  document.getElementById('srcPill').textContent = isLive
-    ? `LIVE · ${fcNight.total_mm} mm forecast`
-    : `${fcNight.total_mm} mm · ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source}`;
+  document.getElementById('legNight').textContent = isLive ? 'Live Open-Meteo forecast' : 'Night-before forecast (zone input)';
+  document.getElementById('legLatestWrap').style.display = fcLatest ? 'inline-flex' : 'none';
+  document.getElementById('srcPill').textContent = fcNight
+    ? (isLive ? `LIVE · ${fcNight.total_mm} mm forecast` : `${fcNight.total_mm} mm · ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source}`)
+    : `${DATE}`;
   await loadZones();
   loadScore();
 }
@@ -1250,8 +1291,14 @@ addEventListener('resize', drawRain);
     }).bindTooltip(l => `Census Tract ${l.feature.properties.name.replace('Census Tract ', '')}<br>Waymo Q3 collisions: <b>${l.feature.properties.waymo_collisions_q3}</b><br>Nov 18 floods: <b>${l.feature.properties.nov18_floods}</b>`, { sticky: true });
     wl.addTo(map); wl.bringToBack();
     document.getElementById('waymoTog').onchange = e => e.target.checked ? (wl.addTo(map), wl.bringToBack()) : map.removeLayer(wl);
-    if (ws) document.getElementById('waymoPill').title =
-      `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in ${ws.tracts_with_waymo_collisions}/${ws.sf_tracts} Waymo-active tracts. NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} crashes (${ws.nhtsa_sgo.in_rain} in rain).`;
+    if (ws) {
+      const pct = Math.round(100 * ws.nov18_floods_in_waymo_active_tracts / Math.max(1, ws.nov18_floods));
+      const badge = document.getElementById('waymoStat');
+      badge.textContent = `${pct}% floods · ${ws.tracts_with_waymo_collisions} tracts`;
+      badge.style.display = 'inline-block';
+      document.getElementById('waymoPill').title =
+        `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in ${ws.tracts_with_waymo_collisions}/${ws.sf_tracts} Waymo-active tracts. NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} crashes (${ws.nhtsa_sgo.in_rain} in rain).`;
+    }
   }
 })();
 </script>

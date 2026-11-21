@@ -109,9 +109,9 @@ video, #still { width: 100%; height: 100%; object-fit: cover; display: block; }
   font: 600 11px/1.2 var(--font-mono); color: var(--text); pointer-events: none;
   display: inline-flex; align-items: center; gap: 6px;
 }
-.hud-tl { top: 14px; left: 16px; }
-.hud-bl { bottom: 14px; left: 16px; color: var(--text-dim); }
-.hud-tr { top: 14px; right: 16px; }
+.hud-tl { top: 22px; left: 22px; }
+.hud-bl { bottom: 22px; left: 22px; color: var(--text-dim); }
+.hud-tr { top: 22px; right: 22px; }
 .rec-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: pulse 1.2s infinite; }
 
 .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -296,11 +296,17 @@ function updateHud() {
 
 // Real Waymo front-camera frames: Waymo Open Dataset v2.0.1, segment 3132521568089292927 (SF, rain, day), 10 fps
 let wodTimer = null, wodI = 0;
+function wodFrameUrl(idx) { return `/media/frames/waymo/front_${String(idx).padStart(3, '0')}.jpg`; }
 function showSource() {
-  clearInterval(wodTimer);
+  clearInterval(wodTimer); wodTimer = null;
   const usePhoto = srcMode === 'photo' || srcMode === 'waymo';
   if (srcMode === 'waymo') {
-    wodTimer = setInterval(() => { wodI = (wodI + 1) % 199; $('still').src = `/media/frames/waymo/front_${String(wodI).padStart(3, '0')}.jpg`; }, 100);
+    $('still').src = wodFrameUrl(wodI);
+    wodTimer = setInterval(() => {
+      if (inFlight) return;
+      wodI = (wodI + 1) % 199;
+      $('still').src = wodFrameUrl(wodI);
+    }, 100);
   }
   document.querySelectorAll('#srcSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === srcMode));
   $('video').style.display = usePhoto ? 'none' : 'block';
@@ -312,8 +318,8 @@ function showSource() {
 async function init() {
   photos = await j(`/data/photos_${DATE}.json`);
   const seen = new Set();
-  // Prioritize iconic Nov 18 sites (691 2nd St Waymo photo, 402 Ellis, 199 Jones) at top of selector
-  const priority = p => /691 2ND|402 ELLIS|199 JONES|BRODERICK/i.test(p.address) ? 0 : 1;
+  // Put 691 2nd St (real Waymo in Nov 18 floodwater, outside forecast zones) strictly #1
+  const priority = p => /691 2ND/i.test(p.address) ? 0 : /402 ELLIS|199 JONES|BRODERICK/i.test(p.address) ? 1 : 2;
   const unique = photos.filter(p => !seen.has(p.address) && seen.add(p.address));
   unique.sort((a, b) => priority(a) - priority(b));
   $('pos').innerHTML = unique.slice(0, 35)
@@ -335,8 +341,23 @@ $('car').onchange = updateHud;
 
 async function frameB64() {
   const cv = $('cv'), g = cv.getContext('2d');
-  const el = srcMode === 'video' || srcMode === 'cam' ? $('video') : $('still');
-  if (el.tagName === 'IMG' && !el.complete) await new Promise(r => { el.onload = r; });
+  let el = srcMode === 'video' || srcMode === 'cam' ? $('video') : $('still');
+  if (srcMode === 'waymo') {
+    const snap = new Image();
+    snap.src = wodFrameUrl(wodI);
+    await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('Waymo frame load timed out')), 2500);
+      snap.onload = () => { clearTimeout(to); resolve(); };
+      snap.onerror = () => { clearTimeout(to); reject(new Error('Waymo frame failed to load')); };
+    });
+    el = snap;
+  } else if (el.tagName === 'IMG' && (!el.complete || !el.naturalWidth)) {
+    await new Promise((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('Image load timed out')), 2500);
+      el.addEventListener('load', () => { clearTimeout(to); resolve(); }, { once: true });
+      el.addEventListener('error', () => { clearTimeout(to); reject(new Error('Image failed to load')); }, { once: true });
+    });
+  }
   const w = el.videoWidth || el.naturalWidth, h = el.videoHeight || el.naturalHeight;
   if (!w || !h) throw new Error('Camera frame not ready yet — wait 1s or switch to Real 311 Photo.');
   // Downscale to 640px wide so Decision 1 stays fast (~250-400ms)
@@ -348,10 +369,11 @@ async function frameB64() {
 
 async function send() {
   if (inFlight) return;
+  const p = photo();
+  if (!p) { $('vmeta').innerHTML = `<span class="mchip" style="color:var(--amber)">Loading locations…</span>`; return; }
   inFlight = true;
   $('once').disabled = true;
   try {
-    const p = photo();
     const t0 = performance.now();
     const img = await frameB64();
     const r = await j('/api/camera', {
@@ -373,6 +395,9 @@ async function send() {
       `<span class="mchip">Round-trip: <b>${Math.round(performance.now() - t0)} ms</b></span>` +
       `<span class="mchip">${esc(v.car_id)} @ ${esc(p.address)}</span>`;
     if (r.incident && r.incident.id) { lastInc = r.incident.id; pollInc(); }
+    else if (r.incident && r.incident.status === 'already_reported') {
+      $('inc').innerHTML = `<div class="agent-status done"><span>✓ Corridor already closed on fleet map (${esc(v.cell)})</span><span class="mono">active</span></div><div class="muted" style="margin-top:6px">Click <b>Reset Camera Zones</b> to re-run the Managed Agent at this intersection.</div>`;
+    }
   } catch (e) {
     $('vmeta').innerHTML = `<span class="mchip" style="color:var(--red)">${esc(e.message)}</span>`;
   } finally {
