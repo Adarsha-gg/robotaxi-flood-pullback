@@ -30,29 +30,37 @@ ROOT = Path(__file__).resolve().parent.parent
 RENDERS_DIR = ROOT / "media" / "renders"
 CACHE_DIR = ROOT / "media" / "sim_cache"
 
-SIM_QUESTIONS: dict[str, dict[str, Any]] = {
-    "flooded": {
+CAR_DEPTH_CRITERIA = [
+    "dry or damp road",
+    "wet road, thin film of water",
+    "puddles in the lane, below the tire tread",
+    "water over the tire sidewall, below the wheel hub",
+    "water at or above the wheel hub, stall risk for a car",
+]
+
+CAR_QUESTIONS: dict[str, dict[str, Any]] = {
+    "lane_covered": {
         "type": "noul",
-        "instructions": "Is standing water covering the roadway?",
+        "instructions": (
+            "Is standing or running water covering the vehicle TRAVEL LANE of the road "
+            "(not just the sidewalk, gutter or curb)?"
+        ),
     },
-    "reaches_curb": {
-        "type": "noul",
-        "instructions": "Does the water reach or cover the curb?",
-    },
-    "sedan_stall": {
-        "type": "noul",
-        "instructions": "Could a sedan stall or lose traction driving through this water?",
-    },
-    "lane_visible": {
-        "type": "noul",
-        "instructions": "Are the lane markings still visible through the water?",
-    },
-    "depth": {
+    "car_depth": {
         "type": "score",
-        "instructions": "How deep is the standing water on the roadway?",
-        "criteria": DEPTH_CRITERIA,
+        "instructions": "How deep is the water a car driving in this lane would have to go through?",
+        "criteria": CAR_DEPTH_CRITERIA,
+    },
+    "edges_hidden": {
+        "type": "noul",
+        "instructions": (
+            "Does the water hide the lane markings or the curb line, "
+            "so a self-driving car could not tell where the road edge is?"
+        ),
     },
 }
+
+SIM_QUESTIONS = CAR_QUESTIONS
 
 DEFAULT_DECISION_TIMEOUT_S = 8.0
 DEFAULT_VIDEO_TIMEOUT_S = 90.0
@@ -74,11 +82,19 @@ def _stop_session_safely(session: Any) -> None:
 
 def _empty_frame_verdict(latency_ms: int = 0) -> dict[str, Any]:
     return {
+        "lane_covered": None,
+        "edges_hidden": None,
+        "depth_level": 0,
+        "p_tire_or_worse": None,
         "flooded_p": None,
         "depth_score": None,
         "depth_label": "unknown",
+        "action": "slow",
         "latency_ms": latency_ms,
         "rubric": {
+            "lane_covered": None,
+            "edges_hidden": None,
+            "p_tire_or_worse": None,
             "reaches_curb": None,
             "sedan_stall": None,
             "lane_visible": None,
@@ -88,11 +104,18 @@ def _empty_frame_verdict(latency_ms: int = 0) -> dict[str, Any]:
 
 def _empty_sim_verdict(latency_ms: int = 0) -> dict[str, Any]:
     return {
+        "lane_covered": None,
+        "edges_hidden": None,
+        "depth_level": 0,
+        "p_tire_or_worse": None,
         "flooded_p": None,
         "depth_score": None,
         "depth_label": "unknown",
         "latency_ms": latency_ms,
         "rubric": {
+            "lane_covered": None,
+            "edges_hidden": None,
+            "p_tire_or_worse": None,
             "reaches_curb": None,
             "sedan_stall": None,
             "lane_visible": None,
@@ -105,7 +128,7 @@ def _empty_sim_verdict(latency_ms: int = 0) -> dict[str, Any]:
 
 
 def build_prompt(watch: dict, warning: dict) -> str:
-    """Build the Genie 4 street-flood prompt from watch point and forecast warning."""
+    """Build the Genie 4 robotaxi roof-camera street-flood prompt (matches pipeline/ride.py v2)."""
     try:
         peak = (warning or {}).get("peak") or {"mm": 0, "t": ""}
         t_hhmm = str(peak.get("t", ""))[11:16] or "09:00"
@@ -113,16 +136,17 @@ def build_prompt(watch: dict, warning: dict) -> str:
         name = (watch or {}).get("name", "San Francisco")
         n_storm_days = (watch or {}).get("n_storm_days", 0)
         return (
-            f"Street-level view from a driverless robotaxi approaching {name}, San Francisco, at "
-            f"{t_hhmm} on {date_str}. Forecast: {peak.get('mm', 0)} mm of rain in one hour on already "
-            f"saturated streets; this spot flooded on {n_storm_days} past storms. Show how deep the "
-            f"runoff gets on the roadway as the car drives forward slowly. Keep the real street from the photo."
+            f"Forward-facing roof camera of a driverless robotaxi in the travel lane, approaching {name}, "
+            f"San Francisco, at {t_hhmm} on {date_str}. {peak.get('mm', 0)} mm of rain in one hour on saturated "
+            f"streets; this intersection's roadway flooded in {n_storm_days} past storms. Show the water "
+            f"across the driving lane and how high it reaches on the wheels of cars ahead. The robotaxi drives "
+            f"forward slowly in its lane. Keep the real street layout from the reference photo."
         )
     except Exception:
         return (
-            "Street-level view from a driverless robotaxi approaching San Francisco. "
-            "Show how deep the runoff gets on the roadway as the car drives forward slowly. "
-            "Keep the real street from the photo."
+            "Forward-facing roof camera of a driverless robotaxi in the travel lane in San Francisco. "
+            "Show the water across the driving lane and how high it reaches on the wheels of cars ahead. "
+            "Keep the real street layout from the reference photo."
         )
 
 
@@ -165,7 +189,7 @@ def prewarm(watch: dict, warning: dict, session_holder: dict) -> dict:
 
 
 def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
-    """Single Decision 1 call returning all 5 rubric answers (raises on failure)."""
+    """Single Decision 1 call returning CAR-FLOODED rubric answers (raises on failure)."""
     beta = get_beta_client()
     small_jpeg = _shrink_jpeg(jpeg)
     image_b64 = base64.b64encode(small_jpeg).decode("ascii")
@@ -174,40 +198,52 @@ def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
     res = beta.decisions.create(
         model=DECISION_MODEL,
         input=[{"type": "image", "data": image_b64, "mime_type": "image/jpeg"}],
-        questions=SIM_QUESTIONS,
+        questions=CAR_QUESTIONS,
     )
     latency_ms = int(round((time.perf_counter() - t0) * 1000))
 
-    flooded_p = round(_clamp01(res.answers["flooded"].noul), 4)
-    reaches_curb = round(_clamp01(res.answers["reaches_curb"].noul), 4)
-    sedan_stall = round(_clamp01(res.answers["sedan_stall"].noul), 4)
-    lane_visible = round(_clamp01(res.answers["lane_visible"].noul), 4)
+    lane_covered = round(_clamp01(res.answers["lane_covered"].noul), 4)
+    edges_hidden = round(_clamp01(res.answers["edges_hidden"].noul), 4)
 
-    depth_ans = res.answers["depth"]
-    max_score = float(len(DEPTH_CRITERIA) - 1)
+    depth_ans = res.answers["car_depth"]
+    max_score = float(len(CAR_DEPTH_CRITERIA) - 1)
     raw_score = getattr(depth_ans, "score", 0.0) or 0.0
     depth_score = round(_clamp01(raw_score / max_score), 4)
 
-    probs = getattr(depth_ans, "probabilities", None) or {}
-    legend = getattr(depth_ans, "legend", None) or {
-        str(i): label for i, label in enumerate(DEPTH_CRITERIA)
-    }
+    probs_raw = getattr(depth_ans, "probabilities", None) or {}
+    probs = {int(k): float(v) for k, v in probs_raw.items()}
     if probs:
-        top_key = max(probs, key=lambda k: probs[k])
-        depth_label = str(legend.get(str(top_key), DEPTH_CRITERIA[0]))
+        depth_level = max(probs, key=probs.get)
+        p_tire_or_worse = round(_clamp01(sum(v for k, v in probs.items() if k >= 3)), 4)
     else:
-        idx = int(round(_clamp01(raw_score / max_score) * (len(DEPTH_CRITERIA) - 1)))
-        depth_label = DEPTH_CRITERIA[idx]
+        depth_level = int(round(_clamp01(raw_score / max_score) * (len(CAR_DEPTH_CRITERIA) - 1)))
+        p_tire_or_worse = round(_clamp01(1.0 if depth_level >= 3 else 0.0), 4)
+
+    depth_label = CAR_DEPTH_CRITERIA[min(max(depth_level, 0), len(CAR_DEPTH_CRITERIA) - 1)]
+    action = (
+        "avoid"
+        if (lane_covered >= 0.6 and p_tire_or_worse >= 0.5) or (edges_hidden >= 0.6 and lane_covered >= 0.6)
+        else ("slow" if lane_covered >= 0.5 else "proceed")
+    )
 
     return {
-        "flooded_p": flooded_p,
+        "lane_covered": lane_covered,
+        "edges_hidden": edges_hidden,
+        "depth_level": depth_level,
+        "p_tire_or_worse": p_tire_or_worse,
+        "flooded_p": lane_covered,
         "depth_score": depth_score,
         "depth_label": depth_label,
+        "action": action,
         "latency_ms": latency_ms,
         "rubric": {
-            "reaches_curb": reaches_curb,
-            "sedan_stall": sedan_stall,
-            "lane_visible": lane_visible,
+            "lane_covered": lane_covered,
+            "edges_hidden": edges_hidden,
+            "p_tire_or_worse": p_tire_or_worse,
+            # Back-compat aliases for v1 UI bars
+            "reaches_curb": edges_hidden,
+            "sedan_stall": p_tire_or_worse,
+            "lane_visible": round(_clamp01(1.0 - edges_hidden), 4),
         },
     }
 
@@ -257,17 +293,27 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
         if not per_frame:
             return _empty_sim_verdict(latency_ms=wall_ms)
 
-        flooded_ps = [r["flooded_p"] for r in per_frame]
+        flooded_ps = [r["lane_covered"] for r in per_frame]
+        edges_hiddens = [r["edges_hidden"] for r in per_frame]
+        p_tires = [r["p_tire_or_worse"] for r in per_frame]
+        depth_levels = [r["depth_level"] for r in per_frame]
         depth_scores = [r["depth_score"] for r in per_frame]
         depth_labels = [r["depth_label"] for r in per_frame]
 
-        flooded_p = round(float(statistics.median(flooded_ps)), 4)
+        lane_covered = round(float(statistics.median(flooded_ps)), 4)
+        edges_hidden = round(float(statistics.median(edges_hiddens)), 4)
+        p_tire_or_worse = round(float(statistics.median(p_tires)), 4)
+        depth_level = int(round(float(statistics.median(depth_levels))))
         depth_score = round(float(statistics.median(depth_scores)), 4)
         depth_label = Counter(depth_labels).most_common(1)[0][0]
 
         rubric = {
-            k: round(float(statistics.median([r["rubric"][k] for r in per_frame])), 4)
-            for k in ("reaches_curb", "sedan_stall", "lane_visible")
+            "lane_covered": lane_covered,
+            "edges_hidden": edges_hidden,
+            "p_tire_or_worse": p_tire_or_worse,
+            "reaches_curb": edges_hidden,
+            "sedan_stall": p_tire_or_worse,
+            "lane_visible": round(_clamp01(1.0 - edges_hidden), 4),
         }
 
         if len(flooded_ps) >= 2:
@@ -283,15 +329,19 @@ def judge_sim(frames: list[bytes]) -> dict[str, Any]:
 
         agreement = round(_clamp01(1.0 - (max(flooded_ps) - min(flooded_ps))), 4)
 
-        if flooded_p >= 0.6 or rubric["sedan_stall"] >= 0.5:
+        if (lane_covered >= 0.6 and p_tire_or_worse >= 0.5) or (edges_hidden >= 0.6 and lane_covered >= 0.6):
             action = "avoid"
-        elif flooded_p >= 0.3:
+        elif lane_covered >= 0.5:
             action = "slow"
         else:
             action = "proceed"
 
         return {
-            "flooded_p": flooded_p,
+            "lane_covered": lane_covered,
+            "edges_hidden": edges_hidden,
+            "depth_level": depth_level,
+            "p_tire_or_worse": p_tire_or_worse,
+            "flooded_p": lane_covered,
             "depth_score": depth_score,
             "depth_label": depth_label,
             "latency_ms": wall_ms,

@@ -1,0 +1,95 @@
+{
+  "verdict": {
+    "lane_covered": 0.5811,
+    "edges_hidden": 0.4092,
+    "depth_level": 1,
+    "p_tire_or_worse": 0.2429,
+    "flooded_p": 0.5811,
+    "depth_score": 0.4719,
+    "depth_label": "wet road, thin film of water",
+    "latency_ms": 1204,
+    "rubric": {
+      "lane_covered": 0.5811,
+      "edges_hidden": 0.4092,
+      "p_tire_or_worse": 0.2429,
+      "reaches_curb": 0.4092,
+      "sedan_stall": 0.2429,
+      "lane_visible": 0.5908
+    },
+    "per_frame": [
+      {
+        "lane_covered": 0.798,
+        "edges_hidden": 0.5692,
+        "depth_level": 2,
+        "p_tire_or_worse": 0.3675,
+        "flooded_p": 0.798,
+        "depth_score": 0.56,
+        "depth_label": "puddles in the lane, below the tire tread",
+        "action": "slow",
+        "latency_ms": 1191,
+        "rubric": {
+          "lane_covered": 0.798,
+          "edges_hidden": 0.5692,
+          "p_tire_or_worse": 0.3675,
+          "reaches_curb": 0.5692,
+          "sedan_stall": 0.3675,
+          "lane_visible": 0.4308
+        }
+      },
+      {
+        "lane_covered": 0.5811,
+        "edges_hidden": 0.4038,
+        "depth_level": 1,
+        "p_tire_or_worse": 0.2429,
+        "flooded_p": 0.5811,
+        "depth_score": 0.4719,
+        "depth_label": "wet road, thin film of water",
+        "action": "slow",
+        "latency_ms": 974,
+        "rubric": {
+          "lane_covered": 0.5811,
+          "edges_hidden": 0.4038,
+          "p_tire_or_worse": 0.2429,
+          "reaches_curb": 0.4038,
+          "sedan_stall": 0.2429,
+          "lane_visible": 0.5962
+        }
+      },
+      {
+        "lane_covered": 0.5285,
+        "edges_hidden": 0.4092,
+        "depth_level": 1,
+        "p_tire_or_worse": 0.2077,
+        "flooded_p": 0.5285,
+        "depth_score": 0.4492,
+        "depth_label": "wet road, thin film of water",
+        "action": "slow",
+        "latency_ms": 1181,
+        "rubric": {
+          "lane_covered": 0.5285,
+          "edges_hidden": 0.4092,
+          "p_tire_or_worse": 0.2077,
+          "reaches_curb": 0.4092,
+          "sedan_stall": 0.2077,
+          "lane_visible": 0.5908
+        }
+      }
+    ],
+    "trend": "falling",
+    "agreement": 0.7305,
+    "action": "slow"
+  },
+  "frame": "media/sim_cache/r52_c52/frame_2.jpg",
+  "frames": [
+    "media/sim_cache/r52_c52/frame_0.jpg",
+    "media/sim_cache/r52_c52/frame_1.jpg",
+    "media/sim_cache/r52_c52/frame_2.jpg"
+  ],
+  "genie_first_frame_s": 4.8,
+  "total_s": 14.3,
+  "frames_seen": 147,
+  "source": "genie",
+  "waited_s": 14.3,
+  "error": null,
+  "clip": "media/sim_cache/r52_c52/clip.mp4"
+}

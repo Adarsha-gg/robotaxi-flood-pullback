@@ -138,13 +138,23 @@ def _extract_context(
         if not reroute_clean:
             reroute_clean = None
 
+    # Support BOTH v1 plan (warning.peak, forecast_6h_mm, risky_detail) AND v2 check/merged plan (peak, six_h_mm, risky_b)
     warning = plan.get("warning") if isinstance(plan.get("warning"), dict) else {}
-    peak = warning.get("peak") if isinstance(warning.get("peak"), dict) else {}
+    peak = (
+        warning.get("peak")
+        if isinstance(warning.get("peak"), dict)
+        else (plan.get("peak") if isinstance(plan.get("peak"), dict) else {})
+    )
     peak_mm = round(_safe_float(peak.get("mm"), 0.0), 1)
     forecast_t = _extract_hhmm(peak.get("t"), _extract_hhmm(plan.get("t"), "09:00"))
-    forecast_6h_mm = round(_safe_float(plan.get("forecast_6h_mm"), peak_mm), 1)
+    raw_6h = plan.get("forecast_6h_mm") if plan.get("forecast_6h_mm") is not None else plan.get("six_h_mm")
+    forecast_6h_mm = round(_safe_float(raw_6h, peak_mm), 1)
 
-    next_hours = warning.get("next_hours") if isinstance(warning.get("next_hours"), list) else []
+    next_hours = (
+        warning.get("next_hours")
+        if isinstance(warning.get("next_hours"), list)
+        else (plan.get("next_hours") if isinstance(plan.get("next_hours"), list) else [])
+    )
     hour_labels = [_extract_hhmm(h.get("t"), "") for h in next_hours if isinstance(h, dict)]
     hour_labels = [h for h in hour_labels if h]
     if len(hour_labels) >= 2:
@@ -163,7 +173,11 @@ def _extract_context(
     ]
     watch_eta = _extract_hhmm(watch.get("eta"), forecast_t)
 
-    risky_raw = plan.get("risky_detail") if isinstance(plan.get("risky_detail"), list) else []
+    risky_raw = (
+        plan.get("risky_detail")
+        if isinstance(plan.get("risky_detail"), list)
+        else (plan.get("risky_b") if isinstance(plan.get("risky_b"), list) else [])
+    )
     top3_risky: list[dict[str, Any]] = []
     allowed_dates: set[str] = set(watch_storm_days)
     for item in risky_raw[:3]:
@@ -184,7 +198,8 @@ def _extract_context(
 
     verdict = sim.get("verdict") if isinstance(sim.get("verdict"), dict) else {}
     raw_action = verdict.get("action")
-    flooded_p = round(_safe_float(verdict.get("flooded_p"), 0.0), 3)
+    raw_fp = verdict.get("flooded_p") if verdict.get("flooded_p") is not None else verdict.get("lane_covered")
+    flooded_p = round(_safe_float(raw_fp, 0.0), 3)
     if isinstance(raw_action, str) and raw_action.strip():
         action = "reroute" if raw_action.strip().lower() == "avoid" else "proceed"
     else:
@@ -196,7 +211,7 @@ def _extract_context(
         "depth_label": verdict.get("depth_label") or "unknown",
         "depth_score": verdict.get("depth_score"),
     }
-    for extra in ("rubric", "trend", "agreement"):
+    for extra in ("lane_covered", "edges_hidden", "p_tire_or_worse", "depth_level", "rubric", "trend", "agreement"):
         if extra in verdict and verdict[extra] is not None:
             verdict_for_model[extra] = verdict[extra]
 
