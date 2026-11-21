@@ -1483,13 +1483,104 @@ def _ride_simulate_street(
     }
 
 
+def _extract_ride_risky_cells(plan: dict[str, Any]) -> list[str]:
+    """Normalize risky cell IDs across v1 plan, v2 check, and merged v2 plan+check."""
+    cells: list[str] = []
+    seen: set[str] = set()
+
+    def _add(val: Any) -> None:
+        cs = str(val or "").strip()
+        if cs and cs not in seen:
+            seen.add(cs)
+            cells.append(cs)
+
+    raw_risky = plan.get("risky")
+    if isinstance(raw_risky, list) and raw_risky:
+        for item in raw_risky:
+            if isinstance(item, dict):
+                _add(item.get("cell"))
+            else:
+                _add(item)
+    else:
+        src = plan.get("risky_b") or plan.get("risky_detail") or plan.get("risky_a") or []
+        if isinstance(src, list):
+            for r in src:
+                if isinstance(r, dict) and r.get("cell"):
+                    _add(r.get("cell"))
+                elif isinstance(r, str):
+                    _add(r)
+
+    watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
+    if watch.get("cell"):
+        _add(watch.get("cell"))
+    return cells
+
+
+def _extract_ride_warning(plan: dict[str, Any]) -> dict[str, Any]:
+    """Normalize warning/peak dict across v1 plan and v2 check/plan."""
+    warning = plan.get("warning")
+    if isinstance(warning, dict) and warning:
+        return warning
+    pre_trip = plan.get("pre_trip") if isinstance(plan.get("pre_trip"), dict) else {}
+    next_hours = plan.get("next_hours")
+    if not isinstance(next_hours, list):
+        next_hours = pre_trip.get("hours") if isinstance(pre_trip.get("hours"), list) else []
+    return {
+        "source": plan.get("forecast_source") or pre_trip.get("forecast_source") or "latest",
+        "peak": plan.get("peak"),
+        "next_hours": next_hours,
+    }
+
+
+def _extract_ride_forecast_6h_mm(plan: dict[str, Any]) -> Any:
+    """Normalize 6-hour rain forecast across v1 (forecast_6h_mm) and v2 (six_h_mm)."""
+    if plan.get("forecast_6h_mm") is not None:
+        return plan.get("forecast_6h_mm")
+    if plan.get("six_h_mm") is not None:
+        return plan.get("six_h_mm")
+    pre_trip = plan.get("pre_trip")
+    if isinstance(pre_trip, dict) and pre_trip.get("six_h_mm") is not None:
+        return pre_trip.get("six_h_mm")
+    return None
+
+
+def _extract_ride_route(plan: dict[str, Any]) -> dict[str, Any]:
+    """Normalize route metadata across v1 (route) and v2 (route_a / fast)."""
+    for key in ("route", "route_a", "fast"):
+        val = plan.get(key)
+        if isinstance(val, dict) and val:
+            return val
+    return {}
+
+
+def _compact_ride_closures(closures: Any) -> list[dict[str, Any]]:
+    """Strip coordinate polylines from SFMTA lane closures for lean prompt context."""
+    if not isinstance(closures, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in closures[:6]:
+        if isinstance(item, dict):
+            compact_item = {
+                k: item[k]
+                for k in ("street", "from", "to", "impact", "type", "start", "end", "name")
+                if k in item and item[k] is not None
+            }
+            if not compact_item:
+                compact_item = {k: v for k, v in item.items() if k != "line"}
+            if compact_item:
+                out.append(compact_item)
+        elif isinstance(item, str) and item.strip():
+            out.append({"description": item.strip()})
+    return out
+
+
 def _ride_route_options(
     avoid_cells: Any,
     plan: dict[str, Any],
     tools: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """Compare default route vs. flood-avoiding route via injected callable or safe default."""
-    risky_cells = [str(c).strip() for c in (plan.get("risky") or []) if str(c).strip()]
+    risky_cells = _extract_ride_risky_cells(plan)
     risky_set = set(risky_cells)
     raw_list = avoid_cells if isinstance(avoid_cells, list) else ([avoid_cells] if isinstance(avoid_cells, str) else [])
     clean_avoid: list[str] = []
@@ -1513,7 +1604,7 @@ def _ride_route_options(
         except Exception:
             pass
 
-    route_info = plan.get("route") if isinstance(plan.get("route"), dict) else {}
+    route_info = _extract_ride_route(plan)
     return {
         "default": {"min": route_info.get("min")},
         "safe": None,
@@ -1528,7 +1619,7 @@ def _normalize_ride_decision(
     route_res: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Validate and normalize the final ride decision with strict avoid_cells guard."""
-    risky_cells = [str(c).strip() for c in (plan.get("risky") or []) if str(c).strip()]
+    risky_cells = _extract_ride_risky_cells(plan)
     risky_set = set(risky_cells)
 
     raw_action = str(args.get("action") or "").strip().lower()
@@ -1570,7 +1661,7 @@ def _normalize_ride_decision(
         filtered_avoid = []
 
     watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
-    warning = plan.get("warning") if isinstance(plan.get("warning"), dict) else {}
+    warning = _extract_ride_warning(plan)
     peak = warning.get("peak") if isinstance(warning.get("peak"), dict) else {}
     watch_name = str(watch.get("name") or watch.get("cell") or "flood-prone corridor")
     peak_mm = peak.get("mm")
@@ -1578,6 +1669,7 @@ def _normalize_ride_decision(
     hhmm = peak_t[11:16] if len(peak_t) >= 16 else "09:00"
     n_days = watch.get("n_storm_days")
     storm_days = watch.get("storm_days") if isinstance(watch.get("storm_days"), list) else []
+    watch_closures = _compact_ride_closures(watch.get("closures"))
     verdict = (sim_res or {}).get("verdict") if isinstance(sim_res, dict) else {}
     verdict = verdict if isinstance(verdict, dict) else {}
     fp = verdict.get("flooded_p")
@@ -1593,6 +1685,12 @@ def _normalize_ride_decision(
             parts.append(f"{watch_name} flooded on {n_days} past storm days{cite}")
         if isinstance(fp, (int, float)):
             parts.append(f"simulated street check shows {depth_label} roadway flooding (p={fp:.2f})")
+        if watch_closures:
+            c0 = watch_closures[0]
+            st = str(c0.get("street") or "").strip()
+            imp = str(c0.get("impact") or "lane closure").strip()
+            if st:
+                parts.append(f"active SFMTA {imp} on {st}")
         reason = "; ".join(parts) + "." if parts else f"Flood risk assessment complete for {watch_name}."
 
     rider_message = str(args.get("rider_message") or "").strip()
@@ -1627,33 +1725,72 @@ def _normalize_ride_decision(
 
 def _compact_ride_plan_for_prompt(plan: dict[str, Any]) -> dict[str, Any]:
     """Strip large route coordinate/timestamp arrays so the agent prompt stays lean and fast."""
-    route = plan.get("route") if isinstance(plan.get("route"), dict) else {}
+    raw_date = str(plan.get("date") or str(plan.get("t") or "")[:10] or DEFAULT_DATE).strip()
+    date_str = raw_date[:10] if len(raw_date) >= 10 else DEFAULT_DATE
+    route = _extract_ride_route(plan)
+    warning = _extract_ride_warning(plan)
+    forecast_6h_mm = _extract_ride_forecast_6h_mm(plan)
+    risky_cells = _extract_ride_risky_cells(plan)
+
     watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
-    watch_clean = {k: v for k, v in watch.items() if k != "photo"}
+    watch_clean = {k: v for k, v in watch.items() if k not in ("photo", "closures")}
     if isinstance(watch.get("photo"), dict):
         watch_clean["photo_address"] = watch["photo"].get("address")
-    return {
-        "date": plan.get("date") or DEFAULT_DATE,
+    watch_closures = _compact_ride_closures(watch.get("closures"))
+    if watch_closures:
+        watch_clean["closures"] = watch_closures
+
+    raw_detail = plan.get("risky_b") or plan.get("risky_detail") or plan.get("risky_a") or []
+    risky_detail: list[Any] = []
+    if isinstance(raw_detail, list):
+        for r in raw_detail[:6]:
+            if isinstance(r, dict):
+                rc = {k: v for k, v in r.items() if k != "photo"}
+                if isinstance(r.get("photo"), dict):
+                    rc["photo_address"] = r["photo"].get("address")
+                risky_detail.append(rc)
+            else:
+                risky_detail.append(r)
+
+    compact: dict[str, Any] = {
+        "date": date_str,
         "t": plan.get("t") or DEFAULT_TIME,
-        "decide_t": plan.get("decide_t"),
+        "decide_t": plan.get("decide_t") or plan.get("t"),
         "route": {"min": route.get("min"), "km": route.get("km")},
-        "warning": plan.get("warning"),
-        "forecast_6h_mm": plan.get("forecast_6h_mm"),
+        "warning": warning,
+        "forecast_6h_mm": forecast_6h_mm,
         "watch": watch_clean,
-        "risky": plan.get("risky") or [],
-        "risky_detail": (plan.get("risky_detail") or [])[:6],
+        "risky": risky_cells,
+        "risky_detail": risky_detail,
     }
+    if watch_closures:
+        compact["closures"] = watch_closures
+    return compact
 
 
 def _build_ride_prompt(plan: dict[str, Any], date_str: str, watch_cell: str, risky_cells: list[str]) -> str:
     compact = _compact_ride_plan_for_prompt(plan)
     risky_json = json.dumps(risky_cells)
+    watch = plan.get("watch") if isinstance(plan.get("watch"), dict) else {}
+    watch_closures = _compact_ride_closures(watch.get("closures"))
+    closure_section = ""
+    closure_clause = ""
+    if watch_closures:
+        closure_section = (
+            f"\nACTIVE SFMTA LANE CLOSURES NEAR WATCH BLOCK:\n{json.dumps(watch_closures, indent=2)}\n"
+        )
+        closure_clause = (
+            " Also factor the active SFMTA lane closures above into your decision, reason, "
+            "rider_message, and fleet_notice (reroute if flooding OR compounding lane closures "
+            "make passage unsafe or congested)."
+        )
     return (
         "You are an autonomous robotaxi flood-safety decision agent operating in San Francisco.\n"
         "A mid-ride heavy-rain warning just arrived. Investigate the forecast, historical 311 flood "
         "memory, the simulated street condition ahead, and routing alternatives, then issue a final "
         "routing decision.\n\n"
-        f"RIDE PLAN SUMMARY:\n{json.dumps(compact, indent=2)}\n\n"
+        f"RIDE PLAN SUMMARY:\n{json.dumps(compact, indent=2)}\n"
+        f"{closure_section}\n"
         "REQUIRED WORKFLOW (be concise and fast — batch parallel tool calls):\n"
         "1. In your FIRST turn, call ALL FOUR evidence tools in parallel:\n"
         f"   - get_forecast(date='{date_str}')\n"
@@ -1662,7 +1799,7 @@ def _build_ride_prompt(plan: dict[str, Any], date_str: str, watch_cell: str, ris
         f"   - route_options(avoid_cells={risky_json})\n"
         "2. In your SECOND turn, call decide(action, avoid_cells, reason, rider_message, fleet_notice):\n"
         "   - action: 'reroute' if the simulated street verdict shows flooding/avoid (action=='avoid', "
-        "flooded_p >= 0.6, or sedan_stall >= 0.5), else 'proceed'.\n"
+        f"flooded_p >= 0.6, or sedan_stall >= 0.5), else 'proceed'.{closure_clause}\n"
         f"   - avoid_cells: MUST be a subset of {risky_json} (never invent cell IDs; use [] if proceeding).\n"
         "   - reason: cite real numbers from the forecast, past storm_days dates from cell history, and "
         "explicitly call the street check 'simulated' (never 'observed').\n"
@@ -2030,7 +2167,7 @@ def run_ride(
     raw_date = str(safe_plan.get("date") or str(safe_plan.get("t") or "")[:10] or DEFAULT_DATE).strip()
     date_str = raw_date[:10] if len(raw_date) >= 10 else DEFAULT_DATE
     watch = safe_plan.get("watch") if isinstance(safe_plan.get("watch"), dict) else {}
-    risky_cells = [str(c).strip() for c in (safe_plan.get("risky") or []) if str(c).strip()]
+    risky_cells = _extract_ride_risky_cells(safe_plan)
     watch_cell = str(watch.get("cell") or (risky_cells[0] if risky_cells else "r50_c66")).strip()
 
     total_budget = max(1.0, float(timeout_s))
