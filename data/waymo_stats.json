@@ -1,0 +1,51 @@
+{
+ "cpuc_quarter": "2026Q3",
+ "sf_tracts": 244,
+ "tracts_with_waymo_collisions": 65,
+ "waymo_collisions_sf_q3": 94,
+ "nov18_floods": 778,
+ "nov18_floods_in_waymo_active_tracts": 374,
+ "top_flooded_waymo_tracts": [
+  {
+   "geoid": "06075017700",
+   "floods": 28,
+   "collisions": 2
+  },
+  {
+   "geoid": "06075980900",
+   "floods": 26,
+   "collisions": 1
+  },
+  {
+   "geoid": "06075021500",
+   "floods": 24,
+   "collisions": 1
+  },
+  {
+   "geoid": "06075018000",
+   "floods": 21,
+   "collisions": 4
+  },
+  {
+   "geoid": "06075016200",
+   "floods": 21,
+   "collisions": 1
+  },
+  {
+   "geoid": "06075025502",
+   "floods": 17,
+   "collisions": 1
+  },
+  {
+   "geoid": "06075017804",
+   "floods": 17,
+   "collisions": 1
+  }
+ ],
+ "nhtsa_sgo": {
+  "waymo_sf_crash_reports": 402,
+  "in_rain": 16,
+  "months": "Jun 2025 .. Oct 2026"
+ },
+ "note": "Waymo redacts trip locations, times and stoppage locations in its CPUC filings; tracts with reported collisions are used as the public proxy for where Waymo drives."
+}

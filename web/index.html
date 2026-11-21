@@ -52,6 +52,7 @@ h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
   <h1>Flood <b>Pull-Back</b></h1>
   <span class="pill" id="datePill">San Francisco · 2026-11-18</span>
   <span class="pill" id="srcPill">forecast: night before</span>
+  <label class="pill" style="cursor:pointer"><input type="checkbox" id="waymoTog" checked> Waymo activity (CPUC 2026 Q3)</label>
   <div class="seg" id="setSeg"><button data-set="carbon">Gemini 4 Carbon</button><button data-set="baseline">Baseline</button></div>
   <div class="legend">
     <span><span class="dot" style="background:var(--amber)"></span>proposed</span>
@@ -340,6 +341,17 @@ addEventListener('resize', drawRain);
   document.getElementById('datePill').textContent = `San Francisco · ${DATE}`;
   document.getElementById('srcPill').textContent = `zones from ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source} forecast · ${fcNight.total_mm} mm`;
   await loadZones(); loadScore();
+  // real Waymo data: tracts where Waymo reported collisions in Q3 2026 (its trip locations are redacted)
+  const [wg, ws] = await Promise.all([j('/data/waymo_sf.geojson'), j('/data/waymo_stats.json')]).catch(() => [null, null]);
+  if (wg) {
+    const wl = L.geoJSON(wg, {filter: f => f.properties.waymo_collisions_q3 > 0, interactive: true,
+      style: f => ({color: '#4da3ff', weight: 1.2, opacity: 0.7, fill: true, fillOpacity: 0.04, dashArray: '2 4'})})
+      .bindTooltip(l => `Census tract ${l.feature.properties.name.replace('Census Tract ', '')}<br>Waymo collisions, 2026 Q3: <b>${l.feature.properties.waymo_collisions_q3}</b><br>Nov 18 floods: <b>${l.feature.properties.nov18_floods}</b>`, {sticky: true});
+    wl.addTo(map); wl.bringToBack();
+    document.getElementById('waymoTog').onchange = e => e.target.checked ? wl.addTo(map) : map.removeLayer(wl);
+    if (ws) document.getElementById('waymoTog').parentElement.title =
+      `${ws.nov18_floods_in_waymo_active_tracts}/${ws.nov18_floods} Nov 18 floods fell in the ${ws.tracts_with_waymo_collisions} tracts where Waymo reported collisions (of ${ws.sf_tracts}). NHTSA: ${ws.nhtsa_sgo.waymo_sf_crash_reports} Waymo SF crash reports, ${ws.nhtsa_sgo.in_rain} in rain (${ws.nhtsa_sgo.months}).`;
+  }
 })();
 </script>
 </body>
