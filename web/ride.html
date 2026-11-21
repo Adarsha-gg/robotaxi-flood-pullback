@@ -51,8 +51,15 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
 .pill{display:inline-block;font:700 12px "JetBrains Mono",monospace;padding:3px 9px;border-radius:7px;margin-right:6px}
 .p-go{background:#0b2a1e;color:var(--route)}.p-slow{background:#33230b;color:var(--cone)}.p-stop{background:#3a1014;color:#ff8a95}.p-info{background:#0d2234;color:var(--water)}
 .shots{display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-top:12px}
-.shots img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#000;display:block}
+.shots img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#05070a;display:block}
 .shots .c{font-size:11px;color:var(--dim);margin-top:4px}
+.sim-wait{width:100%;aspect-ratio:16/10;border-radius:10px;border:1px solid var(--line);background:linear-gradient(110deg,#090d14 25%,#121b28 50%,#090d14 75%);background-size:200% 100%;animation:shimmer 1.6s linear infinite;display:flex;align-items:center;justify-content:center;color:var(--muted);font:600 11px "JetBrains Mono",monospace;letter-spacing:.04em}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.voice-btn{display:inline-flex;align-items:center;gap:5px;margin-top:8px;background:#0d2234;border:1px solid rgba(56,225,255,.35);color:var(--accent);border-radius:8px;padding:4px 10px;font:600 11.5px Inter;cursor:pointer}
+.voice-btn:hover{background:#12304a}
+.tabs a.sub{opacity:.58;font-weight:500}.tabs a.sub:hover{opacity:1;color:var(--text)}
+.phys-note{margin-top:8px;padding:7px 10px;border-radius:8px;background:#0a0e15;border:1px solid var(--line);font-size:11.5px;color:var(--muted);line-height:1.4}
+.phys-note b{color:var(--text);font-weight:600}
 .meters{display:grid;gap:7px;margin-top:12px}
 .m{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:12.5px;color:var(--muted)}
 .m .t{height:7px;border-radius:4px;background:#05070a;overflow:hidden}.m .t div{height:100%;background:var(--flood)}
@@ -75,7 +82,7 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
   <div style="position:relative">
     <div id="map"></div>
     <div class="hud brand"><b>Flood <span>Pull-Back</span></b>
-      <div class="tabs"><a href="/" id="tReplay">Replay · Nov 18</a><a href="/ride?mode=live" id="tLive" style="display:none">Live · tonight</a><a href="/trip">Plan a trip</a></div></div>
+      <div class="tabs"><a href="/" id="tReplay">Replay · Nov 18</a><a href="/ride?mode=live" id="tLive" style="display:none">Live · tonight</a><a href="/trip">Plan a trip</a><a href="/ops" class="sub" title="City-wide Fleet Ops Console">Ops</a><a href="/cam" class="sub" title="Fleet Camera & Managed Agent">Cam</a></div></div>
     <div class="hud trip"><div class="clock" id="clock">08:58</div>
       <div class="tripline"><span id="tripName">Inner Richmond → Caltrain</span> · W-112 · <span id="state">ready</span></div></div>
     <div class="hud caption" id="caption"></div>
@@ -101,14 +108,21 @@ const LIVE = new URLSearchParams(location.search).get('mode') === 'live';
 const FROM = [37.7800, -122.4650], TO = [37.7765, -122.3946], T0 = '2026-11-18T08:58';
 const LFROM = [37.7502, -122.4337], LTO = [37.7840, -122.4010];
 const MIN_MS = 2000;
-const post = (u, b) => fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b || {})}).then(r => r.json());
+const post = async (u, b) => {
+  const r = await fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b || {})});
+  const txt = await r.text();
+  let d = {};
+  try { d = txt ? JSON.parse(txt) : {}; } catch { d = {error: txt || `HTTP ${r.status}`}; }
+  if (!r.ok && !d.error) d.error = `HTTP ${r.status}`;
+  return d;
+};
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const hm = t => t.slice(11, 16);
+const hm = t => (t || '').slice(11, 16);
 const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
-const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+const fmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
 const iso = m => `2026-11-18T${fmt(m)}:${String(Math.floor((m % 1) * 60)).padStart(2, '0')}`;
 const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/, \d{5}$/, '');
-const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 const pct = v => Math.round((v || 0) * 100) + '%';
 
 const map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([37.776, -122.43], 14);
@@ -116,9 +130,41 @@ const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
 L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16}).addTo(map);
 L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16, opacity: .45}).addTo(map);
 const lay = {fast: L.layerGroup().addTo(map), route: L.layerGroup().addTo(map), haz: L.layerGroup().addTo(map), ev: L.layerGroup().addTo(map), car: L.layerGroup().addTo(map)};
-let running = false, carM, SPEED = 1, clockM = 0, current = null;
+let running = false, runId = 0, carM, SPEED = 1, clockM = 0, current = null, voiceAudio = null;
 // prefetch the plan (routing + Carbon) on page load so Start is instant
 let PREFETCH = LIVE ? null : post('/api/ride/plan', {from: [37.7800, -122.4650], to: [37.7765, -122.3946], t: '2026-11-18T08:58'}).catch(() => null);
+window.addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/genie/stop', '{}'); } catch {} });
+function playVoice(url, btn) {
+  try {
+    if (voiceAudio) { voiceAudio.pause(); voiceAudio = null; }
+    voiceAudio = new Audio(url);
+    if (btn) btn.textContent = '🔊 Playing…';
+    voiceAudio.onended = () => { if (btn) btn.textContent = '🔊 Play cabin voice'; };
+    voiceAudio.onerror = () => { if (btn) btn.textContent = '🔊 Audio unavailable'; };
+    voiceAudio.play().catch(() => { if (btn) btn.textContent = '🔊 Play cabin voice'; });
+  } catch {}
+}
+function pollGenieStream(myId, isDone, onAttach) {
+  let attached = false;
+  (async () => {
+    for (let k = 0; k < 45 && running && runId === myId && !isDone(); k++) {
+      await sleep(550);
+      if (!running || runId !== myId || isDone()) return;
+      const st = await fetch('/api/genie/status').then(r => r.json()).catch(() => ({}));
+      if (st.status === 'live' && !isDone()) {
+        const slot = $('simSlot');
+        if (slot) {
+          slot.innerHTML = `<img id="simImg" src="/api/genie/stream?ts=${Date.now()}">`;
+          if ($('simC')) $('simC').textContent = 'Genie 4 · live';
+          attached = true;
+          onAttach && onAttach();
+        }
+        return;
+      }
+    }
+  })();
+  return () => attached;
+}
 
 function collapse(line) { if (current) { current.remove(); current = null; } if (line) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
 function card(k, h, p) {
@@ -163,155 +209,214 @@ function meters(v) {
 }
 
 // =================== REPLAY: Nov 18 ===================
-async function start() {
+async function start(myId) {
   running = true; $('go').disabled = true; SPEED = 1; $('feed').innerHTML = ''; current = null;
-  card('Before pickup · 08:58', 'Checking the fastest route…', 'Night-before forecast + every street that has flooded in past storms.');
-  state('checking route');
-  const P = (PREFETCH && await PREFETCH) || await post('/api/ride/plan', {from: FROM, to: TO, t: T0}); PREFETCH = null;
-  const fast = P.fast, A = P.route_a, D1 = P.pre_decision;
-  const fl = L.polyline(fast.coords, {color: '#ffffff', weight: 4, opacity: .85}).addTo(lay.fast);
-  map.fitBounds(fl.getBounds(), {padding: [120, 120]});
-  carM = L.marker(fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
-  L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.fast);
-  await sleep(700);
-  P.risky_a.forEach((r, i) => waterPin(r, i === 0));
-  say(`${P.risky_a.length} streets on the fastest route have flooded in past storms`);
-  await sleep(1600);
-  lay.fast.clearLayers();
-  L.polyline(fast.coords, {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
-  L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.fast);
-  const aLine = await drawLine(lay.route, A.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1200);
-  const dA = A.min - fast.min;
-  const x1 = card('Before pickup · decision', D1 ? esc(D1.headline) : 'Flood-aware route', `<span class="pill p-go">${D1 ? D1.action.toUpperCase() : 'REROUTE'}</span><span class="pill p-info">${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min</span>`);
-  if (D1) x1.innerHTML = why(D1);
-  say(`Carbon picked the flood-aware route · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
-  await sleep(3200);
-  collapse(`<b>Route chosen before pickup</b> · avoids ${P.risky_a.length} flood-prone streets · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
+  const alive = () => running && runId === myId;
+  try {
+    card('Before pickup · 08:58', 'Checking the fastest route…', 'Night-before forecast + every street that has flooded in past storms.');
+    state('checking route');
+    const pre = PREFETCH ? await PREFETCH : null; PREFETCH = null;
+    const P = (pre && !pre.error && pre.fast) ? pre : await post('/api/ride/plan', {from: FROM, to: TO, t: T0});
+    if (!alive()) return;
+    if (!P || P.error || !P.fast) { card('Could not plan ride', esc(P?.error || 'Server unavailable')); state('error'); return; }
+    const fast = P.fast, A = P.route_a, D1 = P.pre_decision;
+    const fl = L.polyline(fast.coords, {color: '#ffffff', weight: 4, opacity: .85}).addTo(lay.fast);
+    map.fitBounds(fl.getBounds(), {padding: [120, 120]});
+    carM = L.marker(fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+    L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.fast);
+    await sleep(700);
+    if (!alive()) return;
+    P.risky_a.forEach((r, i) => waterPin(r, i === 0));
+    say(`${P.risky_a.length} streets on the fastest route have flooded in past storms`);
+    await sleep(1600);
+    if (!alive()) return;
+    lay.fast.clearLayers();
+    L.polyline(fast.coords, {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
+    L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.fast);
+    const aLine = await drawLine(lay.route, A.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1200);
+    if (!alive()) return;
+    const dA = A.min - fast.min;
+    const x1 = card('Before pickup · decision', D1 ? esc(D1.headline) : 'Flood-aware route', `<span class="pill p-go">${D1 ? D1.action.toUpperCase() : 'REROUTE'}</span><span class="pill p-info">${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min</span>`);
+    if (D1) x1.innerHTML = why(D1);
+    say(`Carbon picked the flood-aware route · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
+    await sleep(3200);
+    if (!alive()) return;
+    collapse(`<b>Route chosen before pickup</b> · avoids ${P.risky_a.length} flood-prone streets · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
 
-  state('driving'); say('');
-  const C = await post('/api/ride/check');
-  await drive(A, 0, C.at_index);
-  if (!running) return;
-  const W = C.watch;
-  say(`New forecast: ${C.peak.mm} mm of rain in the next hour`);
-  const x2 = card(`Mid-ride · ${hm(C.t)}`, `New forecast: ${C.peak.mm} mm/h at ${hm(C.peak.t)}`, 'Much heavier than last night’s run. Re-checking the rest of the route while driving.');
-  const mx = Math.max(...C.next_hours.map(h => h.mm), 1);
-  x2.innerHTML = `<div class="rain">${C.next_hours.map(h => `<div style="height:${Math.max(5, h.mm / mx * 100)}%"><span>${hm(h.t)}</span></div>`).join('')}</div>`;
-  const simP = W ? post('/api/ride/simulate') : Promise.resolve(null);
-  SPEED = 0.35; state('slowing · simulating ahead', true);
-  let done = false, sim = null; simP.then(s => { sim = s; done = true; });
-  const midDrive = drive(A, C.at_index, A.coords.length - 1, null, () => done);
-  await sleep(2200);
+    state('driving'); say('');
+    const C = await post('/api/ride/check');
+    if (!alive()) return;
+    if (!C || C.error) { card('Mid-ride check failed', esc(C?.error || 'Check unavailable')); state('error'); return; }
+    await drive(A, 0, C.at_index);
+    if (!alive()) return;
+    const W = C.watch;
+    say(`New forecast: ${C.peak.mm} mm of rain in the next hour`);
+    const x2 = card(`Mid-ride · ${hm(C.t)}`, `New forecast: ${C.peak.mm} mm/h at ${hm(C.peak.t)}`, 'Much heavier than last night’s run. Re-checking the rest of the route while driving.');
+    const mx = Math.max(...C.next_hours.map(h => h.mm), 1);
+    x2.innerHTML = `<div class="rain">${C.next_hours.map(h => `<div style="height:${Math.max(5, h.mm / mx * 100)}%"><span>${hm(h.t)}</span></div>`).join('')}</div>`;
+    const simP = W ? post('/api/ride/simulate').catch(e => ({error: String(e)})) : Promise.resolve(null);
+    SPEED = 0.35; state('slowing · simulating ahead', true);
+    let done = false, sim = null; simP.then(s => { sim = s; done = true; });
+    const midDrive = drive(A, C.at_index, A.coords.length - 1, null, () => done || !alive());
+    await sleep(2200);
+    if (!alive()) return;
 
-  if (W) {
-    collapse(`<b>New forecast mid-ride</b> · ${C.peak.mm} mm/h at ${hm(C.peak.t)}`);
-    waterPin(W, true); (W.closures || []).forEach((c, i) => conePin(c, i === 0));
-    map.flyTo([W.lat, W.lon], 15, {duration: 1.2});
-    const mins = Math.max(1, Math.round(toMin(W.eta) - clockM)), nc = (W.closures || []).length;
-    say(`${title(W.name)} in ~${mins} min: floods in heavy rain${nc ? ' + lanes closed nearby' : ''}`);
-    card('Ahead on the route', `${esc(title(W.name))} in ~${mins} min`,
-      `Street flooded in <b style="color:var(--text)">${W.n_storm_days} past storms</b>${nc ? `, and <b style="color:var(--text)">${nc} permitted lane closures</b> are active right next to it (${esc(title(W.closures[0].street))}, ${esc(W.closures[0].impact)})` : ''}.`);
-    await sleep(2400);
-    const x4 = card('Simulating with Genie 4', `What ${esc(title(W.name))} looks like at ${hm(C.peak.t)}`,
-      'Genie 4 builds the street from the robotaxi’s roof camera, starting from a real street-level photo, then Decision 1 checks it the way a car would.');
-    x4.innerHTML = `<div class="shots"><div><img src="/${W.photo.path}"><div class="c">Real photo · ${esc(title(W.photo.address))} · ${hm(W.photo.t)}</div></div>
-      <div><img id="simImg" src="/api/genie/stream?ts=${Date.now()}"><div class="c" id="simC">Genie 4 · live</div></div></div><div id="simV"></div>`;
+    let wasStreamed = () => false;
+    if (W) {
+      collapse(`<b>New forecast mid-ride</b> · ${C.peak.mm} mm/h at ${hm(C.peak.t)}`);
+      waterPin(W, true); (W.closures || []).forEach((c, i) => conePin(c, i === 0));
+      map.flyTo([W.lat, W.lon], 15, {duration: 1.2});
+      const mins = Math.max(1, Math.round(toMin(W.eta) - clockM)), nc = (W.closures || []).length;
+      say(`${title(W.name)} in ~${mins} min: floods in heavy rain${nc ? ' + lanes closed nearby' : ''}`);
+      card('Ahead on the route', `${esc(title(W.name))} in ~${mins} min`,
+        `Street flooded in <b style="color:var(--text)">${W.n_storm_days} past storms</b>${nc ? `, and <b style="color:var(--text)">${nc} permitted lane closures</b> are active right next to it (${esc(title(W.closures[0].street))}, ${esc(W.closures[0].impact)})` : ''}.`);
+      await sleep(2400);
+      if (!alive()) return;
+      const x4 = card('Simulating with Genie 4', `What ${esc(title(W.name))} looks like at ${hm(C.peak.t)}`,
+        'Genie 4 builds the street from the robotaxi’s roof camera, starting from a real street-level photo, then Decision 1 checks it the way a car would.');
+      x4.innerHTML = `<div class="shots"><div><img src="/${W.photo.path}"><div class="c">Real photo · ${esc(title(W.photo.address))} · ${hm(W.photo.t)}</div></div>
+        <div><div id="simSlot"><div class="sim-wait">Genie 4 · rendering…</div></div><div class="c" id="simC">Genie 4 · warming</div></div></div><div id="simV"></div>`;
+      wasStreamed = pollGenieStream(myId, () => done);
+    }
+    const idxNow = await midDrive;
+    if (!alive()) return;
+    if (sim && !sim.error && sim.verdict) {
+      const v = sim.verdict, cls = v.action === 'avoid' ? 'p-stop' : v.action === 'slow' ? 'p-slow' : 'p-go';
+      const showFrame = () => {
+        const slot = $('simSlot');
+        if (sim.frame && slot) slot.innerHTML = `<img id="simImg" src="/${sim.frame}">`;
+      };
+      if (!wasStreamed() || (sim.source || '').startsWith('cache')) showFrame();
+      else setTimeout(showFrame, 1500);
+      if ($('simV')) $('simV').innerHTML = `<p style="margin-top:12px"><span class="pill ${cls}">${(v.action || '').toUpperCase()}</span>${esc(v.depth_label)} · checked in ${sim.total_s} s</p>${meters(v)}<div class="phys-note"><b>Why sensors alone struggle:</b> 1550 nm LiDAR absorbs &gt;99% at 10 mm water depth; Jaguar I-PACE sidewall is 4.8 in (NWS loss-of-control at 6 in).</div>`;
+      if ($('simC')) $('simC').textContent = `Genie 4 · simulated ${hm(C.peak.t)}`;
+      await sleep(2600);
+      if (!alive()) return;
+    } else if (sim && sim.error && $('simV')) {
+      $('simV').innerHTML = `<p style="margin-top:10px">Simulation skipped (${esc(sim.error)}). Carbon deciding from forecast, flood memory and closures.</p>`;
+    }
+
+    say('Gemini 4 Carbon is deciding…');
+    const here = [carM.getLatLng().lat, carM.getLatLng().lng];
+    const RR = await post('/api/ride/reroute', {here, t: iso(clockM), index: idxNow});
+    if (!alive()) return;
+    if (!RR || RR.error || !RR.route_b) { card('Decision failed', esc(RR?.error || 'Reroute unavailable')); state('error'); return; }
+    const B = RR.route_b, PR = RR.proof, D2 = RR.decision;
+    if (W) collapse(`<b>Simulated ${esc(title(W.name))}</b> · ${sim && sim.verdict ? esc(sim.verdict.depth_label) : 'fallback'}`);
+    lay.route.clearLayers();
+    L.polyline(A.coords.slice(0, idxNow + 1), {color: '#2fd18b', weight: 6, opacity: .95}).addTo(lay.route);
+    if (D2.action === 'reroute') L.polyline(A.coords.slice(idxNow), {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
+    const bLine = await drawLine(lay.route, B.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 900);
+    if (!alive()) return;
+    map.flyToBounds(L.featureGroup([bLine, aLine]).getBounds(), {padding: [120, 120], duration: 1});
+    const dB = toMin(B.times.at(-1)) - toMin(A.times.at(-1));
+    const x5 = card('Decision · no human', esc(D2.headline), `<span class="pill ${D2.action === 'reroute' ? 'p-go' : 'p-info'}">${D2.action === 'reroute' ? 'REROUTE' : 'KEEP ROUTE'}</span><span class="pill p-info">ETA ${hm(B.times.at(-1))} (${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min)</span>`);
+    x5.innerHTML = why(D2) + `<p style="color:var(--text)">Rider: “${esc(D2.rider_message)}”</p><button class="voice-btn" id="voiceBtn">🔊 Play cabin voice</button>`;
+    const vb = $('voiceBtn'); if (vb) vb.onclick = () => playVoice('/media/audio/rider_reroute.wav', vb);
+    say(D2.action === 'reroute' ? `Rerouted around ${title(W ? W.name : 'the hazard')} · the car never stopped` : 'Kept the route');
+    SPEED = 1; state('driving');
+    await drive(B, 0, B.coords.length - 1);
+    if (!alive()) return;
+    collapse(`<b>Carbon ${D2.action === 'reroute' ? 'rerouted' : 'kept the route'}</b> · ${(D2.latency_ms / 1000).toFixed(1)} s · arrived ${hm(B.times.at(-1))}`);
+    state('arrived'); say(`Arrived ${hm(B.times.at(-1))} · never stopped, never stranded`);
+    await sleep(1500);
+    if (!alive()) return;
+
+    const x6 = card('What really happened that morning', 'Real flood reports kept coming in…', 'San Francisco 311 street-flooding reports, 9 AM to noon.');
+    x6.innerHTML = `<div class="big"><div><b id="cOld" style="color:var(--flood)">0</b><span>on the fastest route</span></div><div><b id="cNew" style="color:var(--route)">0</b><span>on the route W-112 took</span></div></div><p id="pNote"></p>`;
+    const newK = new Set(PR.new_route.map(e => e.t + e.lat)), shown = new Set();
+    const fastOnly = PR.old_route.filter(e => !newK.has(e.t + e.lat));
+    for (let m = clockM; m <= toMin(PR.window[1]) && alive(); m += 2) {
+      setClock(m);
+      for (const e of fastOnly) { const k = e.t + e.lat; if (shown.has(k) || toMin(e.t) > m) continue; shown.add(k);
+        L.circleMarker([e.lat, e.lon], {radius: 5, color: '#ff4d5e', weight: 1, fillColor: '#ff4d5e', fillOpacity: .85}).bindTooltip(`${hm(e.t)} · ${esc(title(e.address))}`).addTo(lay.ev); }
+      $('cOld').textContent = PR.old_route.filter(e => toMin(e.t) <= m).length; $('cNew').textContent = PR.new_route.filter(e => toMin(e.t) <= m).length;
+      if (m >= 660 && m < 664) say('11:00 · Waymo paused all San Francisco service after cars got stuck in floods');
+      await sleep(30);
+    }
+    if (!alive()) return;
+    const first = PR.old_route.slice().sort((a, b) => a.t < b.t ? -1 : 1)[0];
+    $('pNote').innerHTML = `First report on the fastest route: ${first ? hm(first.t) + ' at ' + esc(title(first.address)) : '–'}. Red dots are the floods W-112 avoided.${PR.backtest ? `<br><span style="color:var(--text)">${esc(PR.backtest)}</span>` : ''}`;
+    $('go').textContent = '▶ Replay';
+  } catch (err) {
+    if (alive()) { card('Ride error', esc(err.message || String(err))); state('error'); }
+  } finally {
+    if (runId === myId) { running = false; $('go').disabled = false; }
   }
-  const idxNow = await midDrive;
-  if (!running) return;
-  if (sim && !sim.error) {
-    const v = sim.verdict, cls = v.action === 'avoid' ? 'p-stop' : v.action === 'slow' ? 'p-slow' : 'p-go';
-    $('simV').innerHTML = `<p style="margin-top:12px"><span class="pill ${cls}">${v.action.toUpperCase()}</span>${esc(v.depth_label)} · checked in ${sim.total_s} s</p>${meters(v)}`;
-    $('simC').textContent = `Genie 4 · simulated ${hm(C.peak.t)}`;
-    setTimeout(() => { if (sim.frame && $('simImg')) $('simImg').src = '/' + sim.frame; }, 2500);
-    await sleep(2600);
-  }
-
-  say('Gemini 4 Carbon is deciding…');
-  const here = [carM.getLatLng().lat, carM.getLatLng().lng];
-  const RR = await post('/api/ride/reroute', {here, t: iso(clockM), index: idxNow});
-  const B = RR.route_b, PR = RR.proof, D2 = RR.decision;
-  if (W) collapse(`<b>Simulated ${esc(title(W.name))}</b> · ${sim && sim.verdict ? esc(sim.verdict.depth_label) : ''}`);
-  lay.route.clearLayers();
-  L.polyline(A.coords.slice(0, idxNow + 1), {color: '#2fd18b', weight: 6, opacity: .95}).addTo(lay.route);
-  if (D2.action === 'reroute') L.polyline(A.coords.slice(idxNow), {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
-  const bLine = await drawLine(lay.route, B.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 900);
-  map.flyToBounds(L.featureGroup([bLine, aLine]).getBounds(), {padding: [120, 120], duration: 1});
-  const dB = toMin(B.times.at(-1)) - toMin(A.times.at(-1));
-  const x5 = card('Decision · no human', esc(D2.headline), `<span class="pill ${D2.action === 'reroute' ? 'p-go' : 'p-info'}">${D2.action === 'reroute' ? 'REROUTE' : 'KEEP ROUTE'}</span><span class="pill p-info">ETA ${hm(B.times.at(-1))} (${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min)</span>`);
-  x5.innerHTML = why(D2) + `<p style="color:var(--text)">Rider: “${esc(D2.rider_message)}”</p>`;
-  say(D2.action === 'reroute' ? `Rerouted around ${title(W ? W.name : 'the hazard')} · the car never stopped` : 'Kept the route');
-  SPEED = 1; state('driving');
-  await drive(B, 0, B.coords.length - 1);
-  if (!running) return;
-  collapse(`<b>Carbon ${D2.action === 'reroute' ? 'rerouted' : 'kept the route'}</b> · ${(D2.latency_ms / 1000).toFixed(1)} s · arrived ${hm(B.times.at(-1))}`);
-  state('arrived'); say(`Arrived ${hm(B.times.at(-1))} · never stopped, never stranded`);
-  await sleep(1500);
-
-  const x6 = card('What really happened that morning', 'Real flood reports kept coming in…', 'San Francisco 311 street-flooding reports, 9 AM to noon.');
-  x6.innerHTML = `<div class="big"><div><b id="cOld" style="color:var(--flood)">0</b><span>on the fastest route</span></div><div><b id="cNew" style="color:var(--route)">0</b><span>on the route W-112 took</span></div></div><p id="pNote"></p>`;
-  const newK = new Set(PR.new_route.map(e => e.t + e.lat)), shown = new Set();
-  const fastOnly = PR.old_route.filter(e => !newK.has(e.t + e.lat));
-  for (let m = clockM; m <= toMin(PR.window[1]) && running; m += 2) {
-    setClock(m);
-    for (const e of fastOnly) { const k = e.t + e.lat; if (shown.has(k) || toMin(e.t) > m) continue; shown.add(k);
-      L.circleMarker([e.lat, e.lon], {radius: 5, color: '#ff4d5e', weight: 1, fillColor: '#ff4d5e', fillOpacity: .85}).bindTooltip(`${hm(e.t)} · ${esc(title(e.address))}`).addTo(lay.ev); }
-    $('cOld').textContent = PR.old_route.filter(e => toMin(e.t) <= m).length; $('cNew').textContent = PR.new_route.filter(e => toMin(e.t) <= m).length;
-    if (m >= 660 && m < 664) say('11:00 · Waymo paused all San Francisco service after cars got stuck in floods');
-    await sleep(30);
-  }
-  const first = PR.old_route.slice().sort((a, b) => a.t < b.t ? -1 : 1)[0];
-  $('pNote').innerHTML = `First report on the fastest route: ${first ? hm(first.t) + ' at ' + esc(title(first.address)) : '–'}. Red dots are the floods W-112 avoided.${PR.backtest ? `<br><span style="color:var(--text)">${esc(PR.backtest)}</span>` : ''}`;
-  $('go').disabled = false; $('go').textContent = '▶ Replay';
 }
 
 // =================== LIVE: tonight ===================
-async function startLive() {
+async function startLive(myId) {
   running = true; $('go').disabled = true; $('feed').innerHTML = ''; current = null;
-  card('Tonight · live', 'Checking tonight’s ride…', 'Live forecast, street-flood history through today, surface streets only.');
-  state('checking');
-  const P = await post('/api/live/plan', {from: LFROM, to: LTO});
-  setClock(toMin(P.t));
-  const fl = L.polyline(P.fast.coords, {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
-  map.fitBounds(fl.getBounds(), {padding: [120, 120]});
-  carM = L.marker(P.fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
-  P.risky.forEach((r, i) => waterPin(r, i === 0));
-  await drawLine(lay.route, P.route_a.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1000);
-  const pk = P.forecast.find(h => h.t.slice(0, 13) === P.t.slice(0, 13)) || {mm: 0};
-  const x1 = card(`Ride at ${hm(P.t)} tonight`, P.pre_decision ? esc(P.pre_decision.headline) : 'Route is clear of flood-prone streets', `Live forecast ${pk.mm} mm/h at ${hm(P.t)}.`);
-  if (P.pre_decision) x1.innerHTML = why(P.pre_decision);
-  await sleep(2800);
-  collapse(`<b>Route for ${hm(P.t)}</b> · ${P.risky.length} flood-prone streets avoided`);
-  const x2 = card('Live cameras on the route', 'Pulling Caltrans cameras…', 'Refreshed about every 5 minutes.');
-  const cams = await post('/api/live/cams').catch(() => null);
-  if (!Array.isArray(cams)) { x2.innerHTML = '<p>Camera check failed. Press the button to try again.</p>'; $('go').disabled = false; return; }
-  current.querySelector('h3').textContent = `${cams.filter(c => c.available).length} of ${cams.length} cameras online now`;
-  x2.innerHTML = `<div class="cams">${cams.map(c => `<div><img src="/${c.frame}"><div class="c"><span>${esc((c.name.split(' -- ')[1] || c.name).slice(0, 22))}</span><span>${c.available ? esc(c.verdict.action) : 'offline'}</span></div></div>`).join('')}</div>`;
-  await sleep(2600);
-  const online = cams.filter(c => c.available);
-  if (!online.length) { $('go').disabled = false; return; }
-  const near = b => Math.min(...(P.risky.length ? P.risky : [b]).map(r => Math.hypot((r.lat - b.lat) * 111000, (r.lon - b.lon) * 88000)));
-  const cam = online.slice().sort((a, b) => near(a) - near(b))[0];
-  collapse(`<b>Cameras</b> · ${online.length}/${cams.length} online · ${esc(cam.name.split(' -- ')[1])}: ${esc(cam.verdict.depth_label)} now`);
-  map.flyTo([cam.lat, cam.lon], 15, {duration: 1});
-  const x3 = card('Simulating with Genie 4', `${esc(cam.name.split(' -- ')[1])} at ${hm(cam.eta)}`, 'Seeded with the live camera frame, played forward to the forecast at the time the car passes.');
-  x3.innerHTML = `<div class="shots"><div><img src="/${cam.frame}"><div class="c">Live now · ${cam.fetched_at.slice(11, 16)}</div></div><div><img id="simImg" src="/api/genie/stream?ts=${Date.now()}"><div class="c">Genie 4 · ${hm(cam.eta)}</div></div></div><div id="simV"></div>`;
-  const sim = await post('/api/live/simulate', {cam: cam.cam});
-  if (sim.error) { $('simV').innerHTML = `<p>${esc(sim.error)}</p>`; $('go').disabled = false; return; }
-  $('simV').innerHTML = `<p style="margin-top:12px"><span class="pill ${sim.verdict.action === 'proceed' ? 'p-go' : 'p-slow'}">${sim.verdict.action.toUpperCase()}</span>${esc(sim.verdict.depth_label)}</p>${meters(sim.verdict)}`;
-  setTimeout(() => { if (sim.frame && $('simImg')) $('simImg').src = '/' + sim.frame; }, 2500);
-  await sleep(3000);
-  collapse(`<b>Simulated ${hm(cam.eta)}</b> · ${esc(sim.verdict.depth_label)}`);
-  const D = sim.decision, x4 = card('Decision · no human', esc(D.headline), `<span class="pill ${D.action === 'reroute' ? 'p-stop' : 'p-go'}">${D.action === 'reroute' ? 'REROUTE' : 'KEEP ROUTE'}</span>`);
-  x4.innerHTML = why(D) + '<p>Cameras are re-checked every 5 minutes until departure, and the car re-decides on its own.</p>';
-  state('plan ready'); $('go').disabled = false; $('go').textContent = '▶ Check again';
+  const alive = () => running && runId === myId;
+  try {
+    card('Tonight · live', 'Checking tonight’s ride…', 'Live forecast, street-flood history through today, surface streets only.');
+    state('checking');
+    const P = await post('/api/live/plan', {from: LFROM, to: LTO});
+    if (!alive()) return;
+    if (!P || P.error || !P.fast) { card('Could not plan', esc(P?.error || 'Live plan unavailable')); state('error'); return; }
+    setClock(toMin(P.t));
+    const fl = L.polyline(P.fast.coords, {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
+    map.fitBounds(fl.getBounds(), {padding: [120, 120]});
+    carM = L.marker(P.fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+    P.risky.forEach((r, i) => waterPin(r, i === 0));
+    await drawLine(lay.route, P.route_a.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1000);
+    if (!alive()) return;
+    const pk = P.forecast.find(h => h.t.slice(0, 13) === P.t.slice(0, 13)) || {mm: 0};
+    const x1 = card(`Ride at ${hm(P.t)} tonight`, P.pre_decision ? esc(P.pre_decision.headline) : 'Route is clear of flood-prone streets', `Live forecast ${pk.mm} mm/h at ${hm(P.t)}.`);
+    if (P.pre_decision) x1.innerHTML = why(P.pre_decision);
+    await sleep(2800);
+    if (!alive()) return;
+    collapse(`<b>Route for ${hm(P.t)}</b> · ${P.risky.length} flood-prone streets avoided`);
+    const x2 = card('Live cameras on the route', 'Pulling Caltrans cameras…', 'Refreshed about every 5 minutes.');
+    const cams = await post('/api/live/cams').catch(() => null);
+    if (!alive()) return;
+    if (!Array.isArray(cams)) { x2.innerHTML = '<p>Camera check failed. Press the button to try again.</p>'; return; }
+    current.querySelector('h3').textContent = `${cams.filter(c => c.available).length} of ${cams.length} cameras online now`;
+    x2.innerHTML = `<div class="cams">${cams.map(c => `<div>${c.frame ? `<img src="/${c.frame}">` : '<div class="sim-wait" style="aspect-ratio:4/3;animation:none">offline</div>'}<div class="c"><span>${esc((c.name.split(' -- ')[1] || c.name).slice(0, 22))}</span><span>${c.available ? esc(c.verdict.action) : 'offline'}</span></div></div>`).join('')}</div>`;
+    await sleep(2600);
+    if (!alive()) return;
+    const online = cams.filter(c => c.available);
+    if (!online.length) return;
+    const near = b => Math.min(...(P.risky.length ? P.risky : [b]).map(r => Math.hypot((r.lat - b.lat) * 111000, (r.lon - b.lon) * 88000)));
+    const cam = online.slice().sort((a, b) => near(a) - near(b))[0];
+    collapse(`<b>Cameras</b> · ${online.length}/${cams.length} online · ${esc(cam.name.split(' -- ')[1] || cam.name)}: ${esc(cam.verdict.depth_label)} now`);
+    map.flyTo([cam.lat, cam.lon], 15, {duration: 1});
+    const x3 = card('Simulating with Genie 4', `${esc(cam.name.split(' -- ')[1] || cam.name)} at ${hm(cam.eta)}`, 'Seeded with the live camera frame, played forward to the forecast at the time the car passes.');
+    x3.innerHTML = `<div class="shots"><div><img src="/${cam.frame}"><div class="c">Live now · ${cam.fetched_at.slice(11, 16)}</div></div><div><div id="simSlot"><div class="sim-wait">Genie 4 · rendering…</div></div><div class="c" id="simC">Genie 4 · ${hm(cam.eta)}</div></div></div><div id="simV"></div>`;
+    let simDone = false;
+    const wasStreamed = pollGenieStream(myId, () => simDone);
+    const sim = await post('/api/live/simulate', {cam: cam.cam}).catch(e => ({error: String(e)}));
+    simDone = true;
+    post('/api/genie/stop').catch(() => {});
+    if (!alive()) return;
+    if (sim.error) { $('simV').innerHTML = `<p>${esc(sim.error)}</p>`; return; }
+    $('simV').innerHTML = `<p style="margin-top:12px"><span class="pill ${sim.verdict.action === 'proceed' ? 'p-go' : 'p-slow'}">${sim.verdict.action.toUpperCase()}</span>${esc(sim.verdict.depth_label)}</p>${meters(sim.verdict)}`;
+    const showFrame = () => { const slot = $('simSlot'); if (sim.frame && slot) slot.innerHTML = `<img id="simImg" src="/${sim.frame}">`; };
+    if (!wasStreamed()) showFrame(); else setTimeout(showFrame, 1500);
+    await sleep(3000);
+    if (!alive()) return;
+    collapse(`<b>Simulated ${hm(cam.eta)}</b> · ${esc(sim.verdict.depth_label)}`);
+    const D = sim.decision;
+    if (D) {
+      const x4 = card('Decision · no human', esc(D.headline), `<span class="pill ${D.action === 'reroute' ? 'p-stop' : 'p-go'}">${D.action === 'reroute' ? 'REROUTE' : 'KEEP ROUTE'}</span>`);
+      x4.innerHTML = why(D) + '<p>Cameras are re-checked every 5 minutes until departure, and the car re-decides on its own.</p>';
+    }
+    state('plan ready'); $('go').textContent = '▶ Check again';
+  } catch (err) {
+    if (alive()) { card('Live error', esc(err.message || String(err))); state('error'); }
+  } finally {
+    if (runId === myId) { running = false; $('go').disabled = false; }
+  }
 }
 
 function reset() {
-  running = false; Object.values(lay).forEach(l => l.clearLayers()); say(''); state('ready');
-  $('go').disabled = false; post('/api/genie/stop');
+  runId++; running = false;
+  if (voiceAudio) { try { voiceAudio.pause(); } catch {} voiceAudio = null; }
+  Object.values(lay).forEach(l => l.clearLayers()); say(''); state('ready');
+  $('go').disabled = false; post('/api/genie/stop').catch(() => {});
 }
-$('go').onclick = () => { reset(); setTimeout(LIVE ? startLive : start, 60); };
+$('go').onclick = () => { reset(); const myId = runId; setTimeout(() => (LIVE ? startLive : start)(myId), 50); };
 if (LIVE) {
   $('tLive').className = 'on'; $('tripName').textContent = 'Noe Valley → Moscone'; $('go').textContent = '▶ Plan tonight’s ride'; $('lgFlood').style.display = 'none';
   $('introH').textContent = 'Tonight’s real ride, checked through live cameras.';

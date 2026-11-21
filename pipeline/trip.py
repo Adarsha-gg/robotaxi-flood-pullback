@@ -155,16 +155,32 @@ def simulate(p, cams_now, session_holder):
               f"{target.get('n_storm_days', 0)} past storms. Show the water on the driving lane and how high it reaches "
               f"on car wheels. Keep the real street layout from the reference image. The car drives forward slowly.")
     t0 = time.time()
-    s = GenieSession(img, prompt, max_seconds=30).start()
-    session_holder["session"], session_holder["photo"] = s, {"zone": target["name"], "path": seed_path}
-    while s.status in ("starting", "warming") and time.time() - t0 < 25:
-        time.sleep(0.1)
-    s.send_key("key_down", "key_w")
-    time.sleep(1.2)
-    frame = s.frame
-    v = ride.judge_car(frame) if frame else None
+    s, frame, first_s = None, None, None
+    try:
+        s = GenieSession(img, prompt, max_seconds=30).start()
+        session_holder["session"], session_holder["photo"] = s, {"zone": target["name"], "path": seed_path}
+        while s.status in ("starting", "warming") and time.time() - t0 < 25:
+            time.sleep(0.1)
+        if s.status == "live":
+            s.send_key("key_down", "key_w")
+            time.sleep(1.2)
+            frame = s.frame
+        first_s = round(s.first_frame_at - s.started_at, 1) if s.first_frame_at else None
+    except Exception:
+        frame = None
+    finally:
+        if s:
+            try:
+                s.stop()
+            except Exception:
+                pass
+    try:
+        v = ride.judge_car(frame or img)
+    except Exception:
+        v = {"action": "slow", "depth_label": "simulated check unavailable (seed fallback)", "lane_covered": 0.5, "p_tire_or_worse": 0.25, "edges_hidden": 0.2}
     out_path = None
     if frame:
+        os.makedirs(os.path.join(ROOT, "media", "renders"), exist_ok=True)
         out_path = os.path.join("media", "renders", f"trip_{target['cell']}_{int(time.time())}.jpg")
         with open(os.path.join(ROOT, out_path), "wb") as f:
             f.write(frame)
@@ -179,5 +195,4 @@ def simulate(p, cams_now, session_holder):
         "current_plan": "route avoids the flagged spots" if p["route"]["coords"] != p["fast"]["coords"] else "fastest route",
         "options": {"reroute": "avoid this spot (take or keep the flood-aware route)", "keep_route": "the current plan is fine"}})
     return {"target": target, "eta": eta, "seed": seed, "seed_path": seed_path, "verdict": v, "frame": out_path,
-            "genie_first_frame_s": round(s.first_frame_at - s.started_at, 1) if s.first_frame_at else None,
-            "total_s": round(time.time() - t0, 1), "decision": dec}
+            "genie_first_frame_s": first_s, "total_s": round(time.time() - t0, 1), "decision": dec}
