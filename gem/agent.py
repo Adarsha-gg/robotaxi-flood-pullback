@@ -560,7 +560,7 @@ def _run_managed_agent_loop(
     incident_t: str,
     date_str: str,
     verdict_flooded_p: float | None,
-    max_turns: int = 6,
+    max_turns: int = 4,
 ) -> list[dict[str, Any]]:
     """Run multi-turn tool loop using Antigravity Managed Agents (antigravity-preview-09-2026)."""
     beta = get_beta_client()
@@ -579,7 +579,7 @@ def _run_managed_agent_loop(
             },
             "tools": MANAGED_AGENT_TOOLS,
             "input": next_input,
-            "timeout": 90.0,
+            "timeout": 35.0,
         }
         if prev_id is not None:
             kwargs["previous_interaction_id"] = prev_id
@@ -654,7 +654,6 @@ def _run_carbon_fallback_loop(
     ]
     config = types.GenerateContentConfig(
         tools=[types.Tool(function_declarations=fn_decls)],
-        temperature=0.2,
     )
     contents: list[Any] = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
     trace: list[dict[str, Any]] = []

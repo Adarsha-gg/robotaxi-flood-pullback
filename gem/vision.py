@@ -85,13 +85,21 @@ def judge_video(path: str) -> dict[str, Any]:
       {"flooded_p": float, "depth_score": float, "depth_label": str, "latency_ms": int,
        "summary": str, "first_water_s": float | None}
     """
-    client = get_client()
+    client = get_beta_client()
     video_path = Path(path)
-    video_bytes = video_path.read_bytes()
     mime_type = mimetypes.guess_type(video_path.name)[0] or "video/mp4"
 
+    t0 = time.perf_counter()
+    uploaded = client.files.upload(file=str(video_path))
+    while getattr(getattr(uploaded, "state", None), "name", None) == "PROCESSING":
+        time.sleep(1.0)
+        uploaded = client.files.get(name=uploaded.name)
+
     video_part = types.Part(
-        inline_data=types.Blob(data=video_bytes, mime_type=mime_type),
+        file_data=types.FileData(
+            file_uri=uploaded.uri,
+            mime_type=uploaded.mime_type or mime_type,
+        ),
         media_processing=types.MediaProcessing.AGENTIC,
     )
     prompt = (
@@ -104,7 +112,6 @@ def judge_video(path: str) -> dict[str, Any]:
         "first_water_s (float seconds when standing roadway water first appears, or null if none)."
     )
 
-    t0 = time.perf_counter()
     res = client.models.generate_content(
         model=VIDEO_MODEL,
         contents=[video_part, prompt],
