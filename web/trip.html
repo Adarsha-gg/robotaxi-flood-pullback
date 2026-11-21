@@ -13,6 +13,9 @@
 .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 .preset{background:#0a0d12;border:1px solid var(--line);color:var(--muted);border-radius:99px;padding:6px 12px;font:500 14px Inter;cursor:pointer}
 .preset:hover{border-color:var(--accent);color:var(--text)}
+.campin{width:18px;height:18px;border-radius:5px;background:var(--accent);border:2px solid #001018;box-shadow:0 0 12px var(--accent)}
+.l-cam{width:12px!important;height:12px;border-radius:3px;background:var(--accent);margin-left:4px}
+.cams.one{grid-template-columns:1fr}.cams.one img{aspect-ratio:16/9}
 .cam-off{width:100%;aspect-ratio:4/3;border-radius:10px;border:1px solid var(--line);background:#090d14;display:flex;align-items:center;justify-content:center;color:var(--dim);font:600 13px "JetBrains Mono",monospace}
 </style>
 </head>
@@ -32,6 +35,7 @@
       <span id="lgFlood"><i class="l-flood"></i>flood reported to 311, last 3 days</span>
       <span id="lgWater"><i class="l-water"></i>street that floods in heavy rain</span>
       <span id="lgCone"><i class="l-cone"></i>lane closure now</span>
+      <span id="lgCam"><i class="l-cam"></i>live traffic camera</span>
     </div>
   </div>
   <aside>
@@ -44,9 +48,9 @@
         <button type="button" class="preset" data-f="Golden Gate Park" data-t="Ferry Building">GG Park → Ferry Bldg</button>
       </div>
     </div>
-    <div class="feed" id="feed"><div class="card"><div class="k">Live</div>
-      <h3>Any two places in San Francisco.</h3>
-      <p>Live data. Genie 4 simulates the worst spot. Gemini 4 Carbon decides.</p>
+    <div class="feed" id="feed"><div class="card"><div class="k">Live · today</div>
+      <h3>Any two places in San Francisco, right now.</h3>
+      <p>Today’s 311 reports, forecast, closures and live cameras. Genie 4 simulates the worst spot. Gemini 4 Carbon decides.</p>
       <button class="btn wide" id="go">▶ Go</button></div></div>
     <div class="src">Real data: SF 311, SFMTA, Open-Meteo, Caltrans. Genie scenes are simulations.</div>
   </aside>
@@ -59,6 +63,17 @@ const abpin = (lat, lon, text) => L.marker([lat, lon], {icon: L.divIcon({classNa
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const impact = s => { s = String(s || '').toLowerCase(); return /all/.test(s) ? 'all lanes closed' : /some|lane/.test(s) ? 'one lane closed' : s.replace(/-/g, ' ') || 'lane closed'; };
 
+let CAMS = [];
+const camName = c => title(String(c.name || '').split(' -- ').pop()).slice(0, 26);
+const distM = (a, b) => Math.hypot((a.lat - b.lat) * 111000, (a.lon - b.lon) * 88000);
+function camPin(c) {
+  legend('lgCam');
+  L.marker([c.lat, c.lon], {icon: L.divIcon({className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: '<div class="campin"></div>'})})
+    .bindTooltip(`${esc(camName(c))} · live Caltrans camera`).addTo(lay.haz);
+}
+function pulseRed(n) {
+  L.marker([n.lat, n.lon], {icon: L.divIcon({className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: '<div class="ring" style="width:30px;height:30px;border-color:var(--flood)"></div>'})}).addTo(lay.fx);
+}
 async function go() {
   if (running) return;
   const myId = ++runId, alive = () => runId === myId;
@@ -81,9 +96,22 @@ async function go() {
     map.fitBounds(L.latLngBounds(fast.coords), PAD);
     collapse(`<b>Fastest route</b> · ${esc(short(P.from.label))} → ${esc(short(P.to.label))} · ${fast.km} km · ${Math.round(fast.min)} min`);
 
+    // right now in San Francisco: today's real data
+    const day = new Date(P.depart).toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
+    say(`Right now: ${P.notices_all.length} street floods reported to 311 in the last 3 days`);
+    const xt = card(`Right now · ${day} · ${hm(P.depart)}`, `${P.notices_all.length} street floods in the last 3 days`,
+      `Rain today: ${P.rain_today_mm} mm · ${P.closures_today} lane closures today · ${P.cams.length} live cameras near this route`);
+    const fmx = Math.max(...P.forecast.map(h => h.mm), 1);
+    xt.innerHTML = `<div class="rain">${P.forecast.map(h => `<div style="height:${Math.max(5, h.mm / fmx * 100)}%"><span>${hm(h.t)}</span></div>`).join('')}</div>`;
+    for (const n of P.notices_all) { floodDot({lat: n.lat, lon: n.lon, t: n.t.replace(' ', 'T'), address: n.address}); await sleep(12); }
+    P.cams.forEach(camPin);
+    await sleep(3000);
+    if (!alive()) return;
+    collapse(`<b>Right now</b> · ${P.notices_all.length} floods in 3 days · ${P.rain_today_mm} mm rain today`);
+
     // scan
     state('scanning'); say('Scanning every street on the route…');
-    for (const n of P.notices) { floodDot({lat: n.lat, lon: n.lon, t: n.t.replace(' ', 'T'), address: n.address}); await sleep(120); }
+    P.notices.forEach(n => pulseRed(n));
     P.memory.forEach(m => waterPin(m, false));
     const seen = new Map(); for (const c of P.closures) { conePin(c); const k = title(c.street); if (!seen.has(k)) seen.set(k, c); }
     const closures = [...seen.values()];
@@ -116,8 +144,11 @@ async function go() {
       if (!alive()) return;
       const on = cams.filter(c => c.available).length;
       const x5 = card('Live cameras', `${on} of ${cams.length} cameras online now`, 'Decision 1 checks each frame the way a car would.');
-      x5.innerHTML = `<div class="cams">${[...cams].sort((a, b) => b.available - a.available).slice(0, 4).map(c => `<div>${c.available && c.frame ?`<img src="/${c.frame}">` : '<div class="cam-off">offline</div>'}<div class="c"><span>${esc((c.name.split(' -- ')[1] || c.name).slice(0, 22))}</span><span>${c.available ? esc((c.verdict?.depth_label || '').split(',')[0]) : 'offline'}</span></div></div>`).join('')}</div>`;
-      await sleep(2000);
+      CAMS = cams;
+      const live = cams.filter(c => c.available && c.frame);
+      x5.innerHTML = live.length ? `<div class="cams one">${live.slice(0, 2).map(c => `<div><img src="/${c.frame}"><div class="c"><span>${esc(camName(c))} · live</span><span>${esc((c.verdict?.depth_label || '').split(',')[0])}</span></div></div>`).join('')}</div>` : '<p>No camera online right now.</p>';
+      if (live[0]) { const m = P.cams.find(x => x.id === live[0].cam); if (m) map.flyTo([m.lat, m.lon], 15, {duration: 1}); }
+      await sleep(3200);
       collapse(`<b>Live cameras</b> · ${on} of ${cams.length} online`);
     }
 
@@ -130,7 +161,12 @@ async function go() {
       map.flyTo([T.lat, T.lon], 15, {duration: 1});
       card('Simulating with Genie 4', esc(title(T.name)), 'Built from a real image. Played forward to the minute the car would arrive.');
       await sleep(1000);
-      stageOpen(title(T.name), 'arrival', '', '');
+      const k = fast.coords.reduce((bi, c, i) => (Math.hypot(c[0] - T.lat, c[1] - T.lon) < Math.hypot(fast.coords[bi][0] - T.lat, fast.coords[bi][1] - T.lon) ? i : bi), 0);
+      const seedCam = CAMS.filter(c => c.available && c.frame).map(c => ({c, m: P.cams.find(x => x.id === c.cam)})).filter(o => o.m && distM(o.m, T) < 700)
+        .sort((a, b) => distM(a.m, T) - distM(b.m, T))[0];
+      const etaT = fast.times[k], fh = P.forecast.find(h => h.t.slice(0, 13) === etaT.slice(0, 13));
+      stageOpen(title(T.name), hm(etaT), seedCam ? '/' + seedCam.c.frame : '', seedCam ? `Live camera now · ${camName(seedCam.c)} · ${hm(P.depart)}` : '',
+        `Live forecast when the car gets there (${hm(etaT)}): ${fh ? fh.mm : 0} mm of rain that hour · ${P.six_h_mm} mm in 6 h`);
       let done = false;
       const simP = post('/api/trip/simulate'); simP.then(() => { done = true; });
       waitGenieLive(() => done || !alive());
@@ -139,7 +175,7 @@ async function go() {
       if (!alive()) { stageClose(); return; }
       if (S.error) { stageClose(); card('Simulation failed', esc(S.error)); }
       else {
-        if (S.seed_path) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
+        if (S.seed_path && !seedCam) stageSeed('/' + S.seed_path, `${S.seed?.kind || 'Real image'} · ${title(S.seed?.label)}${S.seed?.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`);
         if ($('stage').querySelector('h2')) $('stage').querySelector('h2').textContent = `${title(T.name)} at ${hm(S.eta)}`;
         stageResult(S.frame, hm(S.eta), S.verdict, S.total_s);
         await sleep(3600);

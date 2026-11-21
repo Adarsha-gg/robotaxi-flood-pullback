@@ -141,7 +141,9 @@ async function start() {
     await sleep(2600);
     const arr = hm(W.eta);
     card('Simulating with Genie 4', `What ${esc(title(W.name))} looks like at ${arr}`, 'Built from the clearest real photo nearby. Checked the way a car would.');
-    stageOpen(title(W.name), arr, '/' + W.photo.path, `Real photo · ${title(W.photo.address)} · ${hm(W.photo.t)} · ${W.photo.dist_m} m away`);
+    const FA = W.forecast_at_eta || {};
+    stageOpen(title(W.name), arr, '/' + W.photo.path, `Real photo · ${title(W.photo.address)} · ${hm(W.photo.t)} · ${W.photo.dist_m} m away`,
+      `Forecast when the car gets there (${arr}): ${FA.mm ?? C.peak.mm} mm of rain that hour · ${FA.six_h_mm ?? C.six_h_mm} mm in 6 h`);
     waitGenieLive(() => done);
   }
   const idxNow = await midDrive;

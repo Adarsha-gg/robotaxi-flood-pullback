@@ -124,7 +124,16 @@ def plan(from_q, to_q, depart=None):
         if pre["action"] == "keep_route":
             route_a = fast
     cams = LR.cams_near(route_a, fast)
-    return {"from": a, "to": b, "depart": depart, "forecast": [h for h in hours if h["t"] >= depart[:13] + ":00"][:8],
+    try:
+        allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in notices()]
+    except Exception:
+        allnt = []
+    try:
+        n_closed_today = len(ride.closures(depart[:10], depart, depart[:10] + "T23:59"))
+    except Exception:
+        n_closed_today = 0
+    return {"from": a, "to": b, "depart": depart, "notices_all": allnt, "closures_today": n_closed_today,
+            "rain_today_mm": round(sum(h["mm"] for h in hours if h["t"][:10] == depart[:10]), 1), "forecast": [h for h in hours if h["t"] >= depart[:13] + ":00"][:8],
             "six_h_mm": six, "fast": ride._strip(fast), "route": ride._strip(route_a), "pre_decision": pre,
             "notices": nts, "memory": mem, "closures": cl, "flagged": flagged, "cams": cams, "avoid_cells": avoid,
             "_route_dist": route_a.get("dist")}
@@ -194,5 +203,5 @@ def simulate(p, cams_now, session_holder):
         "genie4_simulation_judged_by_decision1": v, "simulation_seed": seed,
         "current_plan": "route avoids the flagged spots" if p["route"]["coords"] != p["fast"]["coords"] else "fastest route",
         "options": {"reroute": "avoid this spot (take or keep the flood-aware route)", "keep_route": "the current plan is fine"}})
-    return {"target": target, "eta": eta, "seed": seed, "seed_path": seed_path, "verdict": v, "frame": out_path,
+    return {"target": target, "eta": eta, "mm_eta": mm, "seed": seed, "seed_path": seed_path, "verdict": v, "frame": out_path,
             "genie_first_frame_s": first_s, "total_s": round(time.time() - t0, 1), "decision": dec}

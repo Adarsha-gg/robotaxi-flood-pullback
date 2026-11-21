@@ -46,6 +46,7 @@ body{background:var(--bg);color:var(--text);font:16px/1.5 Inter,system-ui,sans-s
 .frame .inset div{font-size:13px;padding:5px 8px;background:rgba(0,0,0,.75);color:#dde3ea}
 .frame .tag{position:absolute;right:14px;top:14px;background:rgba(0,0,0,.7);border-radius:8px;padding:5px 10px;font:800 14px Inter;letter-spacing:.08em}
 .frame .tag.live::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--flood);margin-right:7px;vertical-align:1px}
+.fcline{margin:-6px 0 12px;font:600 17px Inter;color:var(--water)}.fcline:empty{display:none}
 .verdict{margin-top:14px;display:none}.verdict.on{display:block}
 .verdict .line{font-size:20px;font-weight:600}
 .verdict .meters{grid-template-columns:1fr 1fr;column-gap:24px}

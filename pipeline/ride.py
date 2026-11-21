@@ -158,6 +158,9 @@ def check(p, at_index, min_frac=0.0):
     cl = closures_near(ahead_coords, closures(p["date"], t_now, p["route_a"]["times"][-1]))
     live_now = live_reports(p["date"], t_now)
     if watch:
+        eh = [h for h in fc_latest["hours"] if h["t"][:13] == watch["eta"][:13]]
+        watch["forecast_at_eta"] = {"t": watch["eta"], "mm": eh[0]["mm"] if eh else (peak or {}).get("mm", 0),
+                                    "six_h_mm": _six(fc_latest, watch["eta"])}
         watch["live_near"] = [{k: e[k] for k in ("t", "lat", "lon", "address")} for e in live_now
                               if _dist_m((e["lat"], e["lon"]), (watch["lat"], watch["lon"])) <= 500]
         watch["closures"] = [c for c in cl if min(_dist_m((watch["lat"], watch["lon"]), b) for b in c["line"]) < 500]
@@ -224,6 +227,8 @@ def simulate(watch, chk, session_holder, settle_s=1.2, max_wait=25):
     real-Genie fallback so the stage never breaks); fall back to the in-house version."""
     try:
         from gem.sim import simulate_street
+        fa = watch.get("forecast_at_eta")
+        chk = {**chk, "peak": {"t": fa["t"], "mm": fa["mm"]}, "six_h_mm": fa["six_h_mm"]} if fa else chk
         r = simulate_street(watch, chk, session_holder)
         if r and r.get("verdict") and (r.get("frame") or r.get("source", "").startswith("cache")):
             v = r["verdict"]

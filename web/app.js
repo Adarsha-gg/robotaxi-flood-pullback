@@ -98,20 +98,22 @@ function meters(v) {
 const verdictPill = a => `<span class="pill ${a === 'avoid' ? 'p-stop' : a === 'slow' ? 'p-slow' : 'p-go'}">${String(a || '').toUpperCase()}</span>`;
 
 // ---------- the Genie stage (hero) ----------
-function stageOpen(street, when, seedSrc, seedLabel) {
+function stageOpen(street, when, seedSrc, seedLabel, fc) {
   const s = $('stage');
-  s.innerHTML = `<div class="eb">Genie 4 · simulating</div><h2>${esc(street)} at ${esc(when)}</h2>
+  s.innerHTML = `<div class="eb">Genie 4 · simulating the forecast at arrival</div><h2>${esc(street)} at ${esc(when)}</h2>
+    <div class="fcline" id="simFc">${fc ? esc(fc) : ''}</div>
     <div class="frame"><img id="simImg" onerror="this.style.visibility='hidden'" onload="this.style.visibility='visible'">
       <div class="inset"><img id="seedImg" ${seedSrc ? `src="${seedSrc}"` : ''} onerror="this.style.visibility='hidden'"><div id="seedC">${esc(seedLabel || 'finding the nearest real image…')}</div></div>
       <div class="tag live" id="simTag">LIVE</div></div>
     <div class="verdict" id="simV"></div>`;
   s.style.display = 'block'; requestAnimationFrame(() => s.classList.add('on')); say('');
 }
+function stageFc(t) { if ($('simFc')) $('simFc').textContent = t; }
 function stageStream() { if ($('simImg')) $('simImg').src = '/api/genie/stream?ts=' + Date.now(); }
 function stageSeed(src, label) { if ($('seedImg')) { $('seedImg').src = src; $('seedImg').style.visibility = 'visible'; } if ($('seedC')) $('seedC').textContent = label; }
 function stageResult(frame, when, v, secs) {
   if (frame && $('simImg')) $('simImg').src = '/' + frame;
   if ($('simTag')) { $('simTag').className = 'tag'; $('simTag').textContent = 'SIMULATED ' + when; }
-  if ($('simV') && v) { $('simV').innerHTML = `<div class="line">${verdictPill(v.action)} ${esc(v.depth_label || '')} · checked in ${secs} s</div>${meters(v)}`; $('simV').classList.add('on'); }
+  if ($('simV') && v) { $('simV').innerHTML = `<div class="line">${verdictPill(v.action)} ${esc(v.depth_label || '')}</div>${meters(v)}`; $('simV').classList.add('on'); }
 }
 async function stageClose() { const s = $('stage'); s.classList.remove('on'); await sleep(260); s.style.display = 'none'; s.innerHTML = ''; }

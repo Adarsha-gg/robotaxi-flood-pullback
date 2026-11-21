@@ -144,7 +144,8 @@ def build_prompt(watch: dict, warning: dict) -> str:
         n_storm_days = (watch or {}).get("n_storm_days", 0)
         prompt = (
             f"Forward-facing roof camera of a driverless robotaxi in the travel lane, approaching {name}, "
-            f"San Francisco, at {t_hhmm} on {date_str}. {peak.get('mm', 0)} mm of rain in one hour on saturated "
+            f"San Francisco, at {t_hhmm} on {date_str}. Forecast for that moment: {peak.get('mm', 0)} mm of rain in "
+            f"the hour{', ' + str((warning or {}).get('six_h_mm')) + ' mm over the last six hours' if (warning or {}).get('six_h_mm') else ''}, on saturated "
             f"streets; this intersection's roadway flooded in {n_storm_days} past storms. Show the water "
             f"across the driving lane and how high it reaches on the wheels of cars ahead. The robotaxi drives "
             f"forward slowly in its lane. Keep the real street layout from the reference photo."
