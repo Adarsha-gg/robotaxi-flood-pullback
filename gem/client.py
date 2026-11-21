@@ -39,3 +39,15 @@ def shared_beta_client() -> genai.Client:
         if _SHARED is None:
             _SHARED = get_beta_client()
         return _SHARED
+
+
+_SHARED_STD = None
+
+
+def shared_client() -> genai.Client:
+    """One process-wide standard client (thread-safe; keeps the HTTP client alive)."""
+    global _SHARED_STD
+    with _SHARED_LOCK:
+        if _SHARED_STD is None:
+            _SHARED_STD = get_client()
+        return _SHARED_STD

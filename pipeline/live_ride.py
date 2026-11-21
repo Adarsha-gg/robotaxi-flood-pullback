@@ -49,9 +49,15 @@ def plan_live(frm, to, t=None):
     six = _six(hours, t)
     risky = ride._scan(fast, cells, six, 8, 0.1, 0.92)[:4]
     route_a = ride._route(frm, to, [r["cell"] for r in risky], t, no_freeways=True) if risky else fast
+    pre = None
+    if risky:
+        day = [h for h in hours if h["t"][:10] == t[:10]]
+        pre = ride.decide_pre_trip(fast, route_a, risky, six, {"source": "live Open-Meteo", "total_mm": round(sum(h["mm"] for h in day), 1)})
+        if pre["action"] == "keep_route":
+            route_a = fast
     cams = cams_near(route_a, fast)
     return {"now": now, "t": t, "from": frm, "to": to, "forecast": [h for h in hours if h["t"][:10] == t[:10]],
-            "six_h_mm": six, "fast": ride._strip(fast), "route_a": ride._strip(route_a), "risky": risky, "cams": cams}
+            "six_h_mm": six, "pre_decision": pre, "fast": ride._strip(fast), "route_a": ride._strip(route_a), "risky": risky, "cams": cams}
 
 
 def cams_near(*routes):

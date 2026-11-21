@@ -96,7 +96,10 @@ def plan(frm, to, t="2026-11-18T08:58", date="2026-11-18"):
     six_a = _six(fc_night, "2026-11-18T08:00")
     risky_a = _scan(fast, cells, six_a, A_MIN_STORMS, 0.12, 0.9)[:4]
     route_a = _route(frm, to, [r["cell"] for r in risky_a], t) if risky_a else fast
-    return {"from": frm, "to": to, "t": t, "date": date,
+    pre = decide_pre_trip(fast, route_a, risky_a, six_a, fc_night) if risky_a else None
+    if pre and pre["action"] == "keep_route":
+        route_a = fast
+    return {"from": frm, "to": to, "t": t, "date": date, "pre_decision": pre,
             "fast": _strip(fast), "route_a": _strip(route_a), "risky_a": risky_a,
             "pre_trip": {"forecast_source": fc_night["source"], "six_h_mm": six_a,
                          "day_total_mm": fc_night["total_mm"],
@@ -243,3 +246,48 @@ def check_auto(p, lead_min=3.5):
     if not out["watch"] or out["watch"]["cell"] != w["cell"]:
         out = {**first, "at_index": idx, "t": times[idx]}
     return out
+
+
+DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "action": {"type": "string", "enum": ["reroute", "keep_route"]},
+        "confidence": {"type": "number"},
+        "headline": {"type": "string"},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "rider_message": {"type": "string"},
+    },
+    "required": ["action", "confidence", "headline", "reasons", "rider_message"],
+}
+
+
+def decide(ctx):
+    """Gemini 4 Carbon makes the call autonomously (no human approval)."""
+    from google.genai import types
+    from gem.client import shared_client
+    t0 = time.time()
+    prompt = (
+        "You are the autonomous driving policy of a robotaxi in San Francisco. Decide NOW, with no human, whether to "
+        "reroute around the street ahead or keep the current route. Rider safety and not getting stranded in water "
+        "outrank a few minutes of travel time. Use only the facts below; cite the numbers you rely on.\n\n"
+        + json.dumps(ctx, indent=1))
+    res = shared_client().models.generate_content(
+        model="gemini-4-carbon", contents=prompt,
+        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=DECISION_SCHEMA,
+                                           thinking_config=types.ThinkingConfig(thinking_level="low")))
+    out = json.loads(res.text)
+    out["latency_ms"] = int((time.time() - t0) * 1000)
+    out["model"] = "gemini-4-carbon"
+    return out
+
+
+def decide_pre_trip(fast, alt, risky, six_mm, fc):
+    return decide({
+        "moment": "before pickup: choose the route",
+        "fastest_route": {"minutes": fast["min"], "street_flood_blocks_on_it": [
+            {"street": r["name"], "past_storms_with_street_flooding": r["n_storm_days"], "latest": r["storm_days"][:3],
+             "flood_threshold_6h_mm": r["thresh_mm_6h"], "reached_at": r["eta"][11:16]} for r in risky]},
+        "flood_aware_route": {"minutes": alt["min"], "extra_minutes": round(alt["min"] - fast["min"], 1),
+                              "flagged_blocks_crossed": 0},
+        "forecast": {"source": fc.get("source"), "day_total_mm": fc.get("total_mm"), "six_hour_mm_by_8am": six_mm},
+        "options": {"reroute": "take the flood-aware route", "keep_route": "take the fastest route"}})

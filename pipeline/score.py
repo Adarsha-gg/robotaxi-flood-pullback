@@ -58,8 +58,8 @@ def score(date, zset="carbon"):
         return {"error": "no zones", "date": date}
     ap = _load(os.path.join(DATA, f"approvals_{date}_{zset}.json"), {})
     zones = zf["zones"] + _load(os.path.join(DATA, f"camera_zones_{date}.json"), [])
-    for z in zones:
-        z["status"] = ap.get(z["id"], z.get("status", "proposed"))
+    for z in zones:  # autonomous: all model zones are active
+        z["status"] = "approved"
     approved = [z for z in zones if z["status"] == "approved"]
     proposed = [z for z in zones if z["status"] != "rejected"]
     return {"date": date, "set": zset, "generated_by": zf.get("generated_by"),

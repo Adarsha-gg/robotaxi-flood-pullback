@@ -11,6 +11,7 @@
 Run: .venv/bin/python server.py  (http://localhost:8000)
 """
 import json
+from datetime import datetime
 import os
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -67,10 +68,8 @@ def load_zones(date, zset):
     if z is None:
         return None
     z["zones"] += read_json(os.path.join(DATA, f"camera_zones_{date}.json"), [])
-    ap = read_json(approvals_path(date, zset), {})  # apply AFTER camera zones so they can be rejected too
-    for zone in z["zones"]:
-        if zone["id"] in ap:
-            zone["status"] = ap[zone["id"]]
+    for zone in z["zones"]:  # autonomous: every zone the models produce is active immediately (no human approval)
+        zone["status"] = "approved"
     return z
 
 
@@ -186,7 +185,8 @@ class Handler(SimpleHTTPRequestHandler):
             if GENIE["session"]:
                 GENIE["session"].stop()
             try:
-                return self.send_json(ride.simulate(c["watch"], c, GENIE))
+                RIDE["sim"] = ride.simulate(c["watch"], c, GENIE)
+                return self.send_json(RIDE["sim"])
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/ride/reroute":
@@ -197,8 +197,20 @@ class Handler(SimpleHTTPRequestHandler):
             excl = [r["cell"] for r in p["risky_a"]] + [r["cell"] for r in c["risky_b"]]
             here, idx = b["here"], int(b.get("index", c.get("at_index", 0)))
             route_b = ride.reroute(p, here, b["t"], excl)
-            driven = p["route_a"]["coords"][:idx + 1] + route_b["coords"]
-            return self.send_json({"route_b": route_b, "proof": ride.proof(p, driven, p["t"])})
+            rest_a_min = round((datetime.fromisoformat(p["route_a"]["times"][-1]) - datetime.fromisoformat(b["t"])).total_seconds() / 60, 1)
+            w, sim = c.get("watch") or {}, (RIDE.get("sim") or {}).get("verdict")
+            dec = ride.decide({
+                "moment": "mid-ride: newer forecast arrived; car is slowing while it decides",
+                "street_ahead": w.get("name"), "reached_at": (w.get("eta") or "")[11:16], "now": b["t"][11:16],
+                "street_flood_history": {"past_storms_with_street_flooding": w.get("n_storm_days"), "latest": (w.get("storm_days") or [])[:3]},
+                "forecast": {"source": c.get("forecast_source"), "next_hour_mm": (c.get("peak") or {}).get("mm"), "six_hour_mm": c.get("six_h_mm")},
+                "genie4_simulation_judged_by_decision1": sim,
+                "current_route_remaining_minutes": rest_a_min,
+                "alternative_route": {"minutes": route_b["min"], "eta_change_min": round(route_b["min"] - rest_a_min, 1), "flagged_blocks_crossed": 0},
+                "options": {"reroute": "switch to the alternative route now", "keep_route": "stay on the current route"}})
+            final = route_b if dec["action"] == "reroute" else {**p["route_a"], "coords": p["route_a"]["coords"][idx:], "times": p["route_a"]["times"][idx:]}
+            driven = p["route_a"]["coords"][:idx + 1] + final["coords"]
+            return self.send_json({"route_b": final, "decision": dec, "proof": ride.proof(p, driven, p["t"])})
         if u.path == "/api/live/plan":
             from pipeline import live_ride as LR
             p = LR.plan_live(b.get("from", [37.7502, -122.4337]), b.get("to", [37.7840, -122.4010]), b.get("t"))
@@ -222,7 +234,16 @@ class Handler(SimpleHTTPRequestHandler):
             if GENIE["session"]:
                 GENIE["session"].stop()
             try:
-                return self.send_json(LR.simulate_cam(meta, cam["frame"], cam["eta"], mm, p["six_h_mm"], GENIE))
+                sim = LR.simulate_cam(meta, cam["frame"], cam["eta"], mm, p["six_h_mm"], GENIE)
+                from pipeline import ride
+                sim["decision"] = ride.decide({
+                    "moment": "planning tonight's ride; decide whether the route past this camera is safe",
+                    "camera": cam["name"], "camera_now": {"fetched_at": cam["fetched_at"], **(cam["verdict"] or {})},
+                    "car_passes_camera_at": cam["eta"][11:16], "forecast_mm_that_hour": mm, "six_hour_mm": p["six_h_mm"],
+                    "genie4_simulation_at_eta_judged_by_decision1": sim["verdict"],
+                    "route_already_avoids": [r["name"] for r in p["risky"]],
+                    "options": {"reroute": "avoid the streets near this camera tonight", "keep_route": "keep the planned route"}})
+                return self.send_json(sim)
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/genie/start":

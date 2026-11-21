@@ -86,7 +86,7 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
   <aside>
     <div class="ahead"><h2>Robotaxi brain</h2><div><button class="btn ghost" id="reset">Reset</button> <button class="btn" id="go">▶ Start ride</button></div></div>
     <div class="steps">
-      <div class="step" id="s1"><div class="k">01 · Route check before pickup <span class="tag" id="s1t">night-before forecast</span></div>
+      <div class="step" id="s1"><div class="k">01 · Route check before pickup <span class="tag" id="s1t">Carbon decides</span></div>
         <div class="h" id="s1h">–</div><div class="p" id="s1p"></div><ul class="list" id="s1l"></ul></div>
       <div class="step" id="s2"><div class="k">02 · Forecast update, mid-ride <span class="tag amber">newer model run</span></div>
         <div class="h" id="s2h">–</div><div class="p" id="s2p"></div><div class="rain" id="rain"></div><div class="camgrid" id="camgrid"></div></div>
@@ -100,7 +100,7 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
           <div class="bar"><span>Up to tire sidewall or hub</span><div class="t"><div id="bDepth"></div></div><b id="vDepth">–</b></div>
           <div class="bar"><span>Lane lines / curb hidden</span><div class="t"><div id="bHid"></div></div><b id="vHid">–</b></div>
         </div></div>
-      <div class="step" id="s5"><div class="k">05 · Reroute on the move <span class="tag" id="s5t">--</span></div><div class="h" id="s5h">–</div><div class="p" id="s5p"></div></div>
+      <div class="step" id="s5"><div class="k">05 · Gemini 4 Carbon decides, no human <span class="tag" id="s5t">--</span></div><div class="h" id="s5h">–</div><div class="p" id="s5p"></div></div>
       <div class="step" id="s6"><div class="k">06 · What really happened <span class="tag green">real 311 street reports</span></div><div class="h" id="s6h">–</div><div class="p" id="s6p"></div></div>
     </div>
     <div class="foot">Data: SF 311 street-flooding reports (DataSF; basement/property reports excluded) · Open-Meteo forecast runs · Waymo CPUC filing · Gemini 4: Genie 4, Decision 1. Simulated scenes are illustrations seeded with real photos, not measurements.</div>
@@ -185,10 +185,11 @@ async function start() {
   L.polyline(fast.coords, {color: '#ff4d5e', weight: 4, opacity: .8, dashArray: '8 8'}).addTo(lay.route);
   L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.route);
   const aLine = await drawLine(A.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1400);
-  const dA = (A.min - fast.min);
+  const dA = (A.min - fast.min), D1 = P.pre_decision;
   $('s1t').className = 'tag green'; $('s1t').textContent = `${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`;
-  $('s1h').textContent = `Picked the flood-aware route · ETA ${hm(A.times.at(-1))}`;
-  alertMsg(`✓ Route chosen around ${P.risky_a.length} flood-prone blocks · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`, 'green');
+  $('s1h').textContent = D1 ? `Gemini 4 Carbon: ${D1.headline}` : `Flood-aware route · ETA ${hm(A.times.at(-1))}`;
+  if (D1) $('s1l').insertAdjacentHTML('afterend', `<div class="p" style="margin-top:8px">${D1.reasons.map(r => '• ' + esc(r)).join('<br>')}</div><div class="sub" style="margin-top:6px">Decided autonomously in ${(D1.latency_ms / 1000).toFixed(1)} s · confidence ${Math.round(D1.confidence * 100)}%</div>`);
+  alertMsg(`✓ ${D1 ? 'Carbon chose' : 'Chose'} the flood-aware route · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`, 'green');
   await sleep(1300);
 
   // ---- drive; get the mid-ride check ready in the background ----
@@ -246,7 +247,7 @@ async function start() {
   on('s5');
   const here = [carM.getLatLng().lat, carM.getLatLng().lng];
   const RR = await post('/api/ride/reroute', {here, t: iso(clockM), index: idxNow});
-  const B = RR.route_b, PR = RR.proof;
+  const B = RR.route_b, PR = RR.proof, D2 = RR.decision;
   lay.route.clearLayers();
   L.polyline(fast.coords, {color: '#ff4d5e', weight: 3, opacity: .55, dashArray: '6 10'}).addTo(lay.route);
   L.polyline(A.coords.slice(idxNow), {color: '#ff4d5e', weight: 4, opacity: .85, dashArray: '8 8'}).addTo(lay.route);
@@ -256,12 +257,10 @@ async function start() {
   map.flyToBounds(L.featureGroup([bLine, aLine]).getBounds(), {padding: [110, 110], duration: 1});
   const dB = toMin(B.times.at(-1)) - toMin(A.times.at(-1));
   $('s5t').className = 'tag green'; $('s5t').textContent = `ETA ${hm(B.times.at(-1))} (${dB >= 0 ? '+' : ''}${dB.toFixed(1)} min)`;
-  const act = sim && sim.verdict ? sim.verdict.action : 'avoid';
-  $('s5h').textContent = `Turned off before ${title(W ? W.name : 'the block')} without stopping`;
-  $('s5p').textContent = act === 'avoid'
-    ? `Simulation says the lane is impassable for a car. New route avoids every flagged block. Rider: “Rerouting around street flooding ahead.”`
-    : `Simulation says ${act === 'slow' ? 'drivable but slow (water in the lane)' : 'passable'}, and a drier route is ${dB <= 0 ? 'also faster' : 'only ' + dB.toFixed(1) + ' min longer'}, so W-112 takes it.`;
-  alertMsg(`↻ Rerouted around ${title(W ? W.name : 'flooding')} · never stopped`, 'blue');
+  $('s5').querySelector('.k').firstChild.textContent = '05 · Gemini 4 Carbon decides, no human ';
+  $('s5h').textContent = `${D2.action === 'reroute' ? 'REROUTE' : 'KEEP ROUTE'} · ${D2.headline}`;
+  $('s5p').innerHTML = `${D2.reasons.map(r => '• ' + esc(r)).join('<br>')}<br><span style="color:var(--text)">Rider: “${esc(D2.rider_message)}”</span><br><span class="sub">Decided in ${(D2.latency_ms / 1000).toFixed(1)} s · confidence ${Math.round(D2.confidence * 100)}% · car never stopped</span>`;
+  alertMsg(D2.action === 'reroute' ? `↻ Carbon rerouted around ${title(W ? W.name : 'flooding')} · never stopped` : `→ Carbon kept the route · ${D2.headline}`, 'blue');
   SPEED = 1; status('driving', 'go');
 
   // ---- finish the ride; real floods land ----
@@ -306,6 +305,7 @@ async function startLive() {
   for (const r of P.risky) { block(r); await sleep(300); }
   const pk = P.forecast.find(h => h.t.slice(0, 13) === P.t.slice(0, 13)) || {mm: 0};
   $('s1t').textContent = 'live forecast · no freeways';
+  if (P.pre_decision) $('s1l').insertAdjacentHTML('afterend', `<div class="p" style="margin-top:8px"><b style="color:var(--text)">Gemini 4 Carbon: ${esc(P.pre_decision.headline)}</b><br>${P.pre_decision.reasons.map(r => '• ' + esc(r)).join('<br>')}</div>`);
   $('s1h').textContent = P.risky.length ? `Ride at ${hm(P.t)}: fastest street route crosses ${P.risky.length} street-flood blocks` : `Ride at ${hm(P.t)}: no flood-prone blocks under tonight's rain`;
   $('s1p').textContent = `Live Open-Meteo forecast: ${pk.mm} mm at ${hm(P.t)}, ${P.six_h_mm} mm in the 6 hours before. Surface streets only (robotaxis are off CA freeways since Nov 17).`;
   $('s1l').innerHTML = P.risky.map(r => `<li><span>${esc(title(r.name))}</span><span class="tag amber">${r.n_storm_days} past floods</span></li>`).join('');
@@ -353,10 +353,11 @@ async function startLive() {
   $('s4p').textContent += ` Check took ${sim.total_s} s.`; $('simCap').textContent = `Genie 4 · simulated ${hm(cam.eta)} · from the live frame`;
   setTimeout(() => { if (sim.frame) $('simImg').src = '/' + sim.frame; }, 2500);
   // decision
-  on('s5'); $('s5').querySelector('.k').firstChild.textContent = '05 · Plan for tonight ';
-  $('s5t').className = 'tag ' + (v.action === 'avoid' ? 'red' : 'green'); $('s5t').textContent = v.action;
-  $('s5h').textContent = v.action === 'avoid' ? `Close the streets near ${cam.name.split(' -- ')[1]} for the ${hm(cam.eta)} ride` : `Keep the flood-aware route for ${hm(P.t)}`;
-  $('s5p').textContent = `${P.risky.length ? 'The route already avoids ' + P.risky.length + ' flood-prone blocks. ' : ''}Cameras re-checked every 5 minutes until departure; the decision updates if the live frame changes.`;
+  on('s5'); $('s5').querySelector('.k').firstChild.textContent = '05 · Carbon decides for tonight ';
+  const D = sim.decision;
+  $('s5t').className = 'tag ' + (D.action === 'reroute' ? 'red' : 'green'); $('s5t').textContent = D.action === 'reroute' ? 'reroute' : 'keep route';
+  $('s5h').textContent = `Gemini 4 Carbon: ${D.headline}`;
+  $('s5p').innerHTML = `${D.reasons.map(r => '• ' + esc(r)).join('<br>')}<br><span class="sub">Decided in ${(D.latency_ms / 1000).toFixed(1)} s · confidence ${Math.round(D.confidence * 100)}% · cameras re-checked every 5 min and the car re-decides on its own.</span>`;
   $('s6').style.display = 'none'; status('plan ready', 'go');
   $('go').disabled = false; $('go').textContent = '▶ Re-check now';
 }
