@@ -152,7 +152,10 @@ def _normalize_iso_minute(ts: str, fallback: str) -> str:
 
 def _add_hours_iso(ts: str, hours: int) -> str:
     norm = _normalize_iso_minute(ts, DEFAULT_TIME)
+    day_prefix = norm[:10]
     dt = datetime.strptime(norm, "%Y-%m-%dT%H:%M") + timedelta(hours=hours)
+    if dt.strftime("%Y-%m-%d") != day_prefix:
+        return f"{day_prefix}T23:59"
     return dt.strftime("%Y-%m-%dT%H:%M")
 
 
@@ -310,11 +313,16 @@ def propose_zone(
     raw_list = list(cells or [])
     if target_cell and target_cell not in raw_list:
         raw_list.insert(0, target_cell)
+    target_rc = _parse_cell_id(target_cell) if target_cell else None
     for cid in raw_list:
         c = str(cid).strip()
-        if _parse_cell_id(c) is not None and c not in seen:
-            seen.add(c)
-            clean_cells.append(c)
+        parsed_rc = _parse_cell_id(c)
+        if parsed_rc is None or c in seen:
+            continue
+        if target_rc is not None and max(abs(parsed_rc[0] - target_rc[0]), abs(parsed_rc[1] - target_rc[1])) > 2:
+            continue
+        seen.add(c)
+        clean_cells.append(c)
     if not clean_cells:
         fallback = target_cell or "r40_c57"
         clean_cells = [fallback]
@@ -323,7 +331,10 @@ def propose_zone(
     primary_rec = index.get(primary_cell, {})
 
     norm_start = _normalize_iso_minute(start, DEFAULT_TIME)
+    day_prefix = norm_start[:10]
     norm_end = _normalize_iso_minute(end, _add_hours_iso(norm_start, 4))
+    if norm_end[:10] != day_prefix:
+        norm_end = f"{day_prefix}T23:59"
     if norm_end <= norm_start:
         norm_end = _add_hours_iso(norm_start, 4)
 
@@ -560,13 +571,21 @@ def _run_managed_agent_loop(
     incident_t: str,
     date_str: str,
     verdict_flooded_p: float | None,
+    has_image_path: bool = False,
+    on_step: Any = None,
     max_turns: int = 4,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], str | None]:
     """Run multi-turn tool loop using Antigravity Managed Agents (antigravity-preview-09-2026)."""
     beta = get_beta_client()
     trace: list[dict[str, Any]] = []
     prev_id: str | None = None
+    first_interaction_id: str | None = None
     next_input: Any = prompt
+    active_tools = (
+        MANAGED_AGENT_TOOLS
+        if has_image_path
+        else [t for t in MANAGED_AGENT_TOOLS if t.get("name") != "judge_frame"]
+    )
 
     for _turn in range(max_turns):
         kwargs: dict[str, Any] = {
@@ -577,7 +596,7 @@ def _run_managed_agent_loop(
                 "model": MANAGED_AGENT_MODEL,
                 "max_total_tokens": MANAGED_AGENT_MAX_TOKENS,
             },
-            "tools": MANAGED_AGENT_TOOLS,
+            "tools": active_tools,
             "input": next_input,
             "timeout": 35.0,
         }
@@ -586,8 +605,13 @@ def _run_managed_agent_loop(
 
         interaction = beta.interactions.create(**kwargs)
         prev_id = getattr(interaction, "id", None)
+        if first_interaction_id is None and prev_id:
+            first_interaction_id = str(prev_id)
         status = getattr(interaction, "status", None)
         steps = getattr(interaction, "steps", None) or []
+
+        if status == "failed":
+            raise RuntimeError(f"Managed Agent interaction failed (id={prev_id})")
 
         fc_steps = [s for s in steps if getattr(s, "type", None) == "function_call"]
         if not fc_steps:
@@ -609,7 +633,13 @@ def _run_managed_agent_loop(
                 date_str=date_str,
                 verdict_flooded_p=verdict_flooded_p,
             )
-            trace.append({"tool": fname, "args": fargs, "result": result})
+            step_entry = {"tool": fname, "args": fargs, "result": result}
+            trace.append(step_entry)
+            if callable(on_step):
+                try:
+                    on_step(step_entry)
+                except Exception:
+                    pass
             if fname == "propose_zone":
                 called_propose = True
 
@@ -630,7 +660,9 @@ def _run_managed_agent_loop(
             break
         next_input = tool_responses
 
-    return trace
+    if not trace:
+        raise RuntimeError(f"Managed Agent returned no tool calls (id={first_interaction_id})")
+    return trace, first_interaction_id
 
 
 def _run_carbon_fallback_loop(
@@ -780,7 +812,7 @@ def _ensure_contract_steps(
     return trace
 
 
-def run_incident(verdict: dict[str, Any]) -> list[dict[str, Any]]:
+def run_incident(verdict: dict[str, Any], on_step: Any = None) -> list[dict[str, Any]]:
     """Run the Managed Agent flood-incident response workflow for a camera verdict.
 
     Returns a list of tool step dicts: [{"tool": str, "args": dict, "result": Any}, ...]
@@ -798,23 +830,32 @@ def run_incident(verdict: dict[str, Any]) -> list[dict[str, Any]]:
     target_cell = str(target_cell).strip()
     v["cell"] = target_cell
 
-    incident_t = _normalize_iso_minute(str(v.get("t") or ""), DEFAULT_TIME)
-    date_str = str(v.get("date") or incident_t[:10] or DEFAULT_DATE)[:10]
+    raw_t = str(v.get("t") or "").strip()
+    raw_date = str(v.get("date") or "").strip()
+    date_str = (raw_date[:10] if len(raw_date) >= 10 else (raw_t[:10] if len(raw_t) >= 10 else DEFAULT_DATE))
+    incident_t = _normalize_iso_minute(raw_t, f"{date_str}T10:00")
+    date_str = incident_t[:10]
     v["t"] = incident_t
     v["date"] = date_str
 
     verdict_flooded_p = float(v["flooded_p"]) if v.get("flooded_p") is not None else None
+    has_image_path = bool(v.get("path"))
     prompt = _build_incident_prompt(v, target_cell, incident_t, date_str)
 
+    agent_engine = MANAGED_AGENT_NAME
+    interaction_id: str | None = None
     try:
-        trace = _run_managed_agent_loop(
+        trace, interaction_id = _run_managed_agent_loop(
             prompt,
             target_cell=target_cell,
             incident_t=incident_t,
             date_str=date_str,
             verdict_flooded_p=verdict_flooded_p,
+            has_image_path=has_image_path,
+            on_step=on_step,
         )
     except Exception:
+        agent_engine = FALLBACK_CARBON_MODEL
         trace = _run_carbon_fallback_loop(
             prompt,
             target_cell=target_cell,
@@ -823,7 +864,7 @@ def run_incident(verdict: dict[str, Any]) -> list[dict[str, Any]]:
             verdict_flooded_p=verdict_flooded_p,
         )
 
-    return _ensure_contract_steps(
+    final_steps = _ensure_contract_steps(
         trace,
         verdict=v,
         target_cell=target_cell,
@@ -831,6 +872,11 @@ def run_incident(verdict: dict[str, Any]) -> list[dict[str, Any]]:
         date_str=date_str,
         verdict_flooded_p=verdict_flooded_p,
     )
+    if final_steps and isinstance(final_steps[-1].get("result"), dict):
+        final_steps[-1]["result"]["agent_engine"] = agent_engine
+        if interaction_id:
+            final_steps[-1]["result"]["interaction_id"] = interaction_id
+    return final_steps
 
 
 def main(argv: list[str]) -> int:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import mimetypes
 import sys
@@ -17,10 +18,28 @@ DECISION_MODEL = "models/gemini-decision-1"
 VIDEO_MODEL = "gemini-4-hydrogen"
 DEPTH_CRITERIA = ["none", "wet", "ankle", "impassable"]
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_FRAME_DIM = 640
 
 
 def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
+
+
+def _shrink_jpeg(jpeg: bytes, max_dim: int = MAX_FRAME_DIM) -> bytes:
+    """Downscale large frames to <=640px JPEG for faster Decision 1 latency."""
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(jpeg)) as im:
+            if max(im.size) <= max_dim and im.format == "JPEG":
+                return jpeg
+            im = im.convert("RGB")
+            im.thumbnail((max_dim, max_dim))
+            buf = io.BytesIO()
+            im.save(buf, format="JPEG", quality=82, optimize=True)
+            return buf.getvalue()
+    except Exception:
+        return jpeg
 
 
 def judge_frame(jpeg: bytes) -> dict[str, Any]:
@@ -30,7 +49,8 @@ def judge_frame(jpeg: bytes) -> dict[str, Any]:
       {"flooded_p": float, "depth_score": float, "depth_label": str, "latency_ms": int}
     """
     beta = get_beta_client()
-    image_b64 = base64.b64encode(jpeg).decode("ascii")
+    small_jpeg = _shrink_jpeg(jpeg)
+    image_b64 = base64.b64encode(small_jpeg).decode("ascii")
 
     t0 = time.perf_counter()
     res = beta.decisions.create(
