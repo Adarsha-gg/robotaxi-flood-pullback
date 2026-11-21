@@ -1,0 +1,301 @@
+{
+  "generated_at": "2026-11-21T20:22:56Z",
+  "date": "2026-11-18",
+  "tide": {
+    "station": "9414290",
+    "station_name": "San Francisco (Fort Point)",
+    "date": "2026-11-18",
+    "peak_tide_ft": 4.93,
+    "min_tide_ft": 0.81,
+    "peak_t": "07:00",
+    "high_tide_backpressure": false,
+    "product": "predictions",
+    "datum": "MLLW",
+    "ok": true,
+    "elapsed_ms": 166.2
+  },
+  "nws": {
+    "n_active": 2,
+    "has_flood_alert": true,
+    "alerts": [
+      {
+        "event": "Coastal Flood Warning",
+        "severity": "Severe",
+        "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA"
+      },
+      {
+        "event": "Coastal Flood Advisory",
+        "severity": "Minor",
+        "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA"
+      }
+    ],
+    "ok": true,
+    "elapsed_ms": 262.5
+  },
+  "blocks": {
+    "r50_c66": {
+      "block_id": "r50_c66",
+      "name": "4th St & King St",
+      "lat": 37.7764,
+      "lon": -122.3939,
+      "date": "2026-11-18",
+      "elevation": {
+        "lat": 37.7764,
+        "lon": -122.3939,
+        "elevation_ft": 11.48,
+        "neighbor_mean_ft": 13.27,
+        "sink_depth_ft": 1.79,
+        "is_sink": true,
+        "neighbors_ft": {
+          "N": 16.51,
+          "S": 11.09,
+          "E": 12.88,
+          "W": 12.61
+        },
+        "source": "usgs_ned10m",
+        "ok": true,
+        "elapsed_ms": 2411.3
+      },
+      "inlets": {
+        "count": 62,
+        "radius_m": 200,
+        "source": "sfpuc_jtgq-b7c5",
+        "ok": true,
+        "elapsed_ms": 466.2
+      },
+      "tide": {
+        "station": "9414290",
+        "station_name": "San Francisco (Fort Point)",
+        "date": "2026-11-18",
+        "peak_tide_ft": 4.93,
+        "min_tide_ft": 0.81,
+        "peak_t": "07:00",
+        "high_tide_backpressure": false,
+        "product": "predictions",
+        "datum": "MLLW",
+        "ok": true,
+        "elapsed_ms": 166.2
+      },
+      "nws": {
+        "n_active": 2,
+        "has_flood_alert": true,
+        "alerts": [
+          {
+            "event": "Coastal Flood Warning",
+            "severity": "Severe",
+            "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA"
+          },
+          {
+            "event": "Coastal Flood Advisory",
+            "severity": "Minor",
+            "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA"
+          }
+        ],
+        "ok": true,
+        "elapsed_ms": 262.5
+      },
+      "summary": "Elev 11.5ft (SINK +1.8ft) | 62 inlets/200m | Bay peak 4.93ft@07:00 (normal tide) | NWS: Coastal Flood Warning +1",
+      "from_cache": false,
+      "ok": true,
+      "elapsed_ms": 2412.1
+    },
+    "r52_c52": {
+      "block_id": "r52_c52",
+      "name": "Grove St & Van Ness Ave",
+      "lat": 37.7785,
+      "lon": -122.4193,
+      "date": "2026-11-18",
+      "elevation": {
+        "lat": 37.7785,
+        "lon": -122.4193,
+        "elevation_ft": 61.33,
+        "neighbor_mean_ft": 63.8,
+        "sink_depth_ft": 2.47,
+        "is_sink": true,
+        "neighbors_ft": {
+          "N": 67.4,
+          "S": 58.78,
+          "E": 61.3,
+          "W": 67.74
+        },
+        "source": "usgs_ned10m",
+        "ok": true,
+        "elapsed_ms": 2109.5
+      },
+      "inlets": {
+        "count": 44,
+        "radius_m": 200,
+        "source": "sfpuc_jtgq-b7c5",
+        "ok": true,
+        "elapsed_ms": 263.4
+      },
+      "tide": {
+        "station": "9414290",
+        "station_name": "San Francisco (Fort Point)",
+        "date": "2026-11-18",
+        "peak_tide_ft": 4.93,
+        "min_tide_ft": 0.81,
+        "peak_t": "07:00",
+        "high_tide_backpressure": false,
+        "product": "predictions",
+        "datum": "MLLW",
+        "ok": true,
+        "elapsed_ms": 124.7
+      },
+      "nws": {
+        "n_active": 2,
+        "has_flood_alert": true,
+        "alerts": [
+          {
+            "event": "Coastal Flood Warning",
+            "severity": "Severe",
+            "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA"
+          },
+          {
+            "event": "Coastal Flood Advisory",
+            "severity": "Minor",
+            "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA"
+          }
+        ],
+        "ok": true,
+        "elapsed_ms": 225.8
+      },
+      "summary": "Elev 61.3ft (SINK +2.5ft) | 44 inlets/200m | Bay peak 4.93ft@07:00 (normal tide) | NWS: Coastal Flood Warning +1",
+      "from_cache": false,
+      "ok": true,
+      "elapsed_ms": 2110.3
+    },
+    "r53_c68": {
+      "block_id": "r53_c68",
+      "name": "691 2nd St",
+      "lat": 37.7805,
+      "lon": -122.391,
+      "date": "2026-11-18",
+      "elevation": {
+        "lat": 37.7805,
+        "lon": -122.391,
+        "elevation_ft": 21.53,
+        "neighbor_mean_ft": 23.16,
+        "sink_depth_ft": 1.63,
+        "is_sink": true,
+        "neighbors_ft": {
+          "N": 29.11,
+          "S": 16.18,
+          "E": 14.24,
+          "W": 33.11
+        },
+        "source": "usgs_ned10m",
+        "ok": true,
+        "elapsed_ms": 2033.5
+      },
+      "inlets": {
+        "count": 37,
+        "radius_m": 200,
+        "source": "sfpuc_jtgq-b7c5",
+        "ok": true,
+        "elapsed_ms": 345.3
+      },
+      "tide": {
+        "station": "9414290",
+        "station_name": "San Francisco (Fort Point)",
+        "date": "2026-11-18",
+        "peak_tide_ft": 4.93,
+        "min_tide_ft": 0.81,
+        "peak_t": "07:00",
+        "high_tide_backpressure": false,
+        "product": "predictions",
+        "datum": "MLLW",
+        "ok": true,
+        "elapsed_ms": 181.2
+      },
+      "nws": {
+        "n_active": 2,
+        "has_flood_alert": true,
+        "alerts": [
+          {
+            "event": "Coastal Flood Warning",
+            "severity": "Severe",
+            "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA"
+          },
+          {
+            "event": "Coastal Flood Advisory",
+            "severity": "Minor",
+            "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA"
+          }
+        ],
+        "ok": true,
+        "elapsed_ms": 237.6
+      },
+      "summary": "Elev 21.5ft (SINK +1.6ft) | 37 inlets/200m | Bay peak 4.93ft@07:00 (normal tide) | NWS: Coastal Flood Warning +1",
+      "from_cache": false,
+      "ok": true,
+      "elapsed_ms": 2034.0
+    },
+    "r39_c57": {
+      "block_id": "r39_c57",
+      "name": "20th St & Alabama/Florida",
+      "lat": 37.7593,
+      "lon": -122.4108,
+      "date": "2026-11-18",
+      "elevation": {
+        "lat": 37.7593,
+        "lon": -122.4108,
+        "elevation_ft": 29.97,
+        "neighbor_mean_ft": 33.3,
+        "sink_depth_ft": 3.33,
+        "is_sink": true,
+        "neighbors_ft": {
+          "N": 30.37,
+          "S": 32.92,
+          "E": 41.29,
+          "W": 28.59
+        },
+        "source": "usgs_ned10m",
+        "ok": true,
+        "elapsed_ms": 2098.6
+      },
+      "inlets": {
+        "count": 39,
+        "radius_m": 200,
+        "source": "sfpuc_jtgq-b7c5",
+        "ok": true,
+        "elapsed_ms": 3559.8
+      },
+      "tide": {
+        "station": "9414290",
+        "station_name": "San Francisco (Fort Point)",
+        "date": "2026-11-18",
+        "peak_tide_ft": 4.93,
+        "min_tide_ft": 0.81,
+        "peak_t": "07:00",
+        "high_tide_backpressure": false,
+        "product": "predictions",
+        "datum": "MLLW",
+        "ok": true,
+        "elapsed_ms": 116.9
+      },
+      "nws": {
+        "n_active": 2,
+        "has_flood_alert": true,
+        "alerts": [
+          {
+            "event": "Coastal Flood Warning",
+            "severity": "Severe",
+            "headline": "Coastal Flood Warning issued November 21 at 10:24AM PST until November 26 at 4:00PM PST by NWS San Francisco CA"
+          },
+          {
+            "event": "Coastal Flood Advisory",
+            "severity": "Minor",
+            "headline": "Coastal Flood Advisory issued November 21 at 10:24AM PST until November 23 at 6:00AM PST by NWS San Francisco CA"
+          }
+        ],
+        "ok": true,
+        "elapsed_ms": 355.8
+      },
+      "summary": "Elev 30.0ft (SINK +3.3ft) | 39 inlets/200m | Bay peak 4.93ft@07:00 (normal tide) | NWS: Coastal Flood Warning +1",
+      "from_cache": false,
+      "ok": true,
+      "elapsed_ms": 3560.2
+    }
+  }
+}
