@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flood Pull-Back · Plan a trip</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#080a0d;--panel:#0e1116;--card:#141922;--line:#1e2530;--text:#eef1f5;--muted:#8b94a3;--dim:#566070;
+  --route:#2fd18b;--water:#4da3ff;--cone:#ff9a3c;--flood:#ff4d5e;--accent:#38e1ff}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif;overflow:hidden}
+.app{display:grid;grid-template-columns:1fr 420px;height:100vh}
+#map{height:100%;background:var(--bg)}.leaflet-container{background:var(--bg);font-family:Inter,sans-serif}
+.hud{position:absolute;z-index:500;background:rgba(12,15,20,.88);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:14px}
+.brand{left:16px;top:16px;padding:10px 14px;display:flex;align-items:center;gap:14px}
+.brand b{font-weight:800}.brand b span{color:var(--accent)}
+.tabs a{color:var(--muted);text-decoration:none;font-size:12px;font-weight:600;padding:4px 10px;border-radius:8px}
+.tabs a.on{background:#18202b;color:var(--text)}
+.trip{right:16px;top:16px;padding:10px 16px;text-align:right}
+.clock{font:700 30px/1 "JetBrains Mono",monospace}
+.tripline{color:var(--muted);font-size:12px;margin-top:4px}
+#state{font-weight:700;color:var(--route)}#state.slow{color:var(--cone)}
+.caption{left:50%;bottom:20px;transform:translateX(-50%);padding:12px 20px;font-size:16px;font-weight:600;max-width:60%;text-align:center;display:none}
+.legend{left:16px;bottom:20px;padding:8px 12px;font-size:12px;color:var(--muted);display:grid;gap:3px}
+.legend i{display:inline-block;width:18px;margin-right:6px;vertical-align:middle}
+.l-route{height:4px;background:var(--route);border-radius:2px}
+.l-fast{height:0;border-top:2px dashed #7b8494}
+.l-water{width:11px!important;height:11px;border-radius:50%;background:var(--water);margin-left:3px}
+.l-cone{height:4px;background:repeating-linear-gradient(90deg,var(--cone) 0 6px,transparent 6px 9px)}
+.l-flood{width:9px!important;height:9px;border-radius:50%;background:var(--flood);margin-left:4px}
+.pin{background:rgba(12,15,20,.92);border:1px solid var(--water);color:#d7eaff;border-radius:8px;padding:3px 8px;font:600 12px Inter;white-space:nowrap}
+.pin.cone{border-color:var(--cone);color:#ffe2c6}
+aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.head{padding:18px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line)}
+.head h2{margin:0;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.btn{background:var(--accent);color:#001018;border:0;border-radius:10px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:14px}
+.btn:disabled{opacity:.35;cursor:default}
+.feed{flex:1;overflow:auto;padding:16px 18px}
+.done{display:flex;gap:10px;align-items:flex-start;color:var(--muted);font-size:13px;padding:7px 0;border-bottom:1px solid var(--line)}
+.done b{color:var(--text);font-weight:600}.done .ck{color:var(--route);font-weight:800}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
+.card .k{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+.card h3{margin:0 0 6px;font-size:19px;line-height:1.3}
+.card p{margin:6px 0 0;color:var(--muted);font-size:13.5px}
+.why{margin:10px 0 0;padding:0;list-style:none}.why li{color:#c9d1dc;font-size:13px;padding:4px 0 4px 16px;position:relative}
+.why li::before{content:"";position:absolute;left:2px;top:11px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.pill{display:inline-block;font:700 12px "JetBrains Mono",monospace;padding:3px 9px;border-radius:7px;margin-right:6px}
+.p-go{background:#0b2a1e;color:var(--route)}.p-slow{background:#33230b;color:var(--cone)}.p-stop{background:#3a1014;color:#ff8a95}.p-info{background:#0d2234;color:var(--water)}
+.shots{display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-top:12px}
+.shots img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#000;display:block}
+.shots .c{font-size:11px;color:var(--dim);margin-top:4px}
+.meters{display:grid;gap:7px;margin-top:12px}
+.m{display:grid;grid-template-columns:150px 1fr 40px;gap:10px;align-items:center;font-size:12.5px;color:var(--muted)}
+.m .t{height:7px;border-radius:4px;background:#05070a;overflow:hidden}.m .t div{height:100%;background:var(--flood)}
+.m b{font:700 12px "JetBrains Mono",monospace;color:var(--text);text-align:right}
+.big{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.big div{background:#0a0d12;border:1px solid var(--line);border-radius:12px;padding:12px}
+.big b{display:block;font:800 34px/1 "JetBrains Mono",monospace}.big span{font-size:12px;color:var(--muted)}
+.rain{display:flex;gap:5px;align-items:flex-end;height:46px;margin:12px 0 18px}
+.rain div{flex:1;background:var(--water);border-radius:4px 4px 0 0;min-height:3px;position:relative;opacity:.85}
+.rain div span{position:absolute;bottom:-17px;left:0;right:0;text-align:center;font-size:10px;color:var(--dim)}
+.cams{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.cams img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.cams .c{font-size:11px;color:var(--muted);display:flex;justify-content:space-between;margin-top:3px}
+.src{padding:10px 18px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
+@media (max-width:1000px){.app{grid-template-columns:1fr;grid-template-rows:55vh 45vh}.caption{max-width:92%}}
+</style><style>
+.form{display:grid;gap:8px;padding:14px 18px;border-bottom:1px solid var(--line)}
+.form label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.form input{width:100%;background:#0a0d12;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px 12px;font:500 14px Inter}
+.form input:focus{outline:none;border-color:var(--accent)}
+.row2{display:flex;gap:8px;align-items:center}
+.flaglist{margin:10px 0 0;padding:0;list-style:none}.flaglist li{display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.flaglist small{color:var(--muted)}
+.abpin{background:#fff;color:#000;border-radius:8px;padding:3px 8px;font:700 12px Inter;white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="app">
+  <div style="position:relative">
+    <div id="map"></div>
+    <div class="hud brand"><b>Flood <span>Pull-Back</span></b>
+      <div class="tabs"><a href="/ride">Replay · Nov 18</a><a href="/trip" class="on">Plan a trip · live</a></div></div>
+    <div class="hud trip"><div class="clock" id="clock">--:--</div>
+      <div class="tripline"><span id="tripName">pick two places</span> · <span id="state">ready</span></div></div>
+    <div class="hud caption" id="caption"></div>
+    <div class="hud legend">
+      <span><i class="l-route"></i>route the car takes</span>
+      <span><i class="l-fast"></i>fastest route (not taken)</span>
+      <span><i class="l-flood"></i>flood reported to 311, last 3 days</span>
+      <span><i class="l-water"></i>street that floods in heavy rain</span>
+      <span><i class="l-cone"></i>permitted lane closure now</span>
+    </div>
+  </div>
+  <aside>
+    <div class="head"><h2>Robotaxi brain</h2></div>
+    <div class="form">
+      <label>From</label><input id="from" value="Noe Valley">
+      <label>To</label>
+      <div class="row2"><input id="to" value="Moscone Center"><button class="btn" id="go">Go</button></div>
+    </div>
+    <div class="feed" id="feed"><div class="card"><div class="k">Live</div>
+      <h3>Type any two places in San Francisco.</h3>
+      <p>The car finds the route, flags every street with recent flood reports, a flood history under tonight's forecast, or a closed lane, looks through live cameras, simulates the worst spot with Genie 4, and Gemini 4 Carbon decides. No human.</p></div></div>
+    <div class="src">Live data: SF 311 street-flood reports (refreshed daily) · SFMTA permitted closures · Open-Meteo forecast · Caltrans cameras · OpenStreetMap. Models: Genie 4, Decision 1, Gemini 4 Carbon.</div>
+  </aside>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const post = (u, b) => fetch(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b || {})}).then(r => r.json());
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hm = t => (t || '').slice(11, 16);
+const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
+const fmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+const title = s => String(s || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(/ And /g, ' & ').replace(/, Virtual$/, '');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const pct = v => Math.round((v || 0) * 100) + '%';
+const map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([37.765, -122.43], 13);
+const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16}).addTo(map);
+L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16, opacity: .45}).addTo(map);
+const lay = {fast: L.layerGroup().addTo(map), route: L.layerGroup().addTo(map), haz: L.layerGroup().addTo(map), car: L.layerGroup().addTo(map)};
+let current = null, running = false;
+function collapse(line) { if (current) { current.remove(); current = null; } if (line) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
+function card(k, h, p) { if (current) current.remove(); $('feed').insertAdjacentHTML('beforeend', `<div class="card" id="cur"><div class="k">${k}</div><h3>${h}</h3>${p ? `<p>${p}</p>` : ''}<div id="curx"></div></div>`); current = $('cur'); current.scrollIntoView({behavior: 'smooth', block: 'end'}); return $('curx'); }
+const say = t => { const c = $('caption'); c.textContent = t; c.style.display = t ? 'block' : 'none'; };
+const state = t => $('state').textContent = t;
+const carIcon = () => L.divIcon({className: '', iconSize: [20, 20], html: '<div style="width:20px;height:20px;border-radius:50%;background:#38e1ff;box-shadow:0 0 0 6px rgba(56,225,255,.18),0 0 22px #38e1ff;border:2px solid #fff"></div>'});
+async function drawLine(group, coords, style, ms) { const pl = L.polyline([], style).addTo(group), n = coords.length, t0 = performance.now();
+  while (true) { const f = Math.min(1, (performance.now() - t0) / ms); pl.setLatLngs(coords.slice(0, Math.max(2, Math.ceil(n * f)))); if (f >= 1) break; await sleep(25); } return pl; }
+function why(D) { return `<ul class="why">${D.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul><p>Gemini 4 Carbon · ${(D.latency_ms / 1000).toFixed(1)} s · ${pct(D.confidence)} confident · no human</p>`; }
+function meters(v) { const row = (l, x) => `<div class="m"><span>${l}</span><div class="t"><div style="width:${pct(x)}"></div></div><b>${pct(x)}</b></div>`;
+  return `<div class="meters">${row('Water across the lane', v.lane_covered)}${row('Up to tire sidewall / hub', v.p_tire_or_worse)}${row('Lane edges hidden', v.edges_hidden)}${v.lane_closed != null ? row('Lane closed / cones', v.lane_closed) : ''}</div>`; }
+function pin(lat, lon, text) { L.marker([lat, lon], {icon: L.divIcon({className: '', html: `<div class="abpin">${esc(text)}</div>`, iconAnchor: [-10, 10]})}).addTo(lay.car); }
+
+async function go() {
+  if (running) return; running = true; $('go').disabled = true;
+  Object.values(lay).forEach(l => l.clearLayers()); $('feed').innerHTML = ''; current = null; say('');
+  const from = $('from').value.trim(), to = $('to').value.trim();
+  // 1-4: places, route, scan, Carbon's route choice (one server call)
+  card('Step 1 · Finding the places', `${esc(from)} → ${esc(to)}`, 'Geocoding with OpenStreetMap, then routing on surface streets only (robotaxis are off California freeways since Nov 11).');
+  state('planning'); say('Finding the places and the fastest route…');
+  const P = await post('/api/trip/plan', {from, to});
+  if (P.error) { card('Could not plan', esc(P.error)); running = false; $('go').disabled = false; return; }
+  $('tripName').textContent = `${P.from.label.split(',')[0]} → ${P.to.label.split(',')[0]}`;
+  $('clock').textContent = hm(P.depart);
+  const fast = P.fast, R = P.route;
+  pin(P.from.lat, P.from.lon, 'A · ' + P.from.label.split(',')[0]); pin(P.to.lat, P.to.lon, 'B · ' + P.to.label.split(',')[0]);
+  const fl = L.polyline(fast.coords, {color: '#ffffff', weight: 4, opacity: .85}).addTo(lay.fast);
+  map.fitBounds(fl.getBounds(), {padding: [110, 110]});
+  collapse(`<b>Places found</b> · ${esc(P.from.label)} → ${esc(P.to.label)}`);
+  card('Step 2 · Fastest route', `${fast.km} km · ${Math.round(fast.min)} min`, `Leaving ${hm(P.depart)}.`);
+  await sleep(1400);
+  collapse(`<b>Fastest route</b> · ${fast.km} km · ${Math.round(fast.min)} min`);
+  // scan
+  say('Scanning every street on the route…');
+  for (const n of P.notices) { L.circleMarker([n.lat, n.lon], {radius: 7, color: '#ff4d5e', weight: 2, fillColor: '#ff4d5e', fillOpacity: .75}).bindTooltip(`${hm(n.t.replace(' ', 'T'))} ${n.t.slice(5, 10)} · ${esc(title(n.address))} · flood reported to 311`).addTo(lay.haz); await sleep(150); }
+  for (const m of P.memory) L.circleMarker([m.lat, m.lon], {radius: 7, color: '#4da3ff', weight: 2, fillColor: '#4da3ff', fillOpacity: .5}).bindTooltip(`${esc(title(m.name))} · flooded in ${m.n_storm_days} past storms`).addTo(lay.haz);
+  for (const c of P.closures) L.polyline(c.line, {color: '#ff9a3c', weight: 5, opacity: .95, dashArray: '6 4'}).bindTooltip(`${esc(title(c.street))} · ${esc(c.impact)} · ${esc(c.name || c.type)}`).addTo(lay.haz);
+  const x3 = card('Step 3 · What is on this route', `${P.notices.length} flood reports · ${P.memory.length} flood-prone streets · ${P.closures.length} lane closures`,
+    `311 street-flood reports from the last 3 days, streets that flood under tonight’s forecast (${P.six_h_mm} mm in 6 h), and SFMTA closures active now.`);
+  x3.innerHTML = `<ul class="flaglist">${P.flagged.slice(0, 5).map(f => `<li><span>${esc(title(f.name))}</span><small>${f.notices.length ? f.notices.length + ' report' + (f.notices.length > 1 ? 's' : '') + ' · ' : ''}${f.n_storm_days || 0} past floods</small></li>`).join('')}
+    ${P.closures.slice(0, 3).map(c => `<li><span>Lane closed · ${esc(title(c.street))}</span><small>${esc(c.impact)}</small></li>`).join('')}</ul>`;
+  await sleep(3200);
+  collapse(`<b>Scanned the route</b> · ${P.notices.length} flood reports · ${P.memory.length} flood-prone · ${P.closures.length} closures`);
+  // Carbon route choice
+  lay.fast.clearLayers(); L.polyline(fast.coords, {color: '#7b8494', weight: 2, opacity: .7, dashArray: '6 6'}).addTo(lay.fast);
+  await drawLine(lay.route, R.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1000);
+  const D1 = P.pre_decision, dA = R.min - fast.min;
+  const x4 = card('Step 4 · Route decision · no human', D1 ? esc(D1.headline) : 'Nothing risky on the fastest route', D1 ? `<span class="pill p-go">${D1.action.toUpperCase()}</span><span class="pill p-info">${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min</span>` : '');
+  if (D1) x4.innerHTML = why(D1);
+  say(D1 ? `Carbon: ${D1.action === 'reroute' ? 'take the safer route' : 'keep the fastest route'} (${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min)` : 'Route is clear');
+  await sleep(3600);
+  collapse(`<b>Carbon chose the route</b> · ${D1 ? D1.action : 'fastest'} · ${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`);
+  // 5: live cameras
+  card('Step 5 · Live cameras along the way', 'Pulling Caltrans cameras…', 'Refreshed about every 5 minutes.');
+  say('Looking through live cameras…');
+  const cams = P.cams.length ? await post('/api/trip/eyes').catch(() => []) : [];
+  const x5 = card('Step 5 · Live cameras along the way', `${cams.filter(c => c.available).length} of ${cams.length} cameras online now`, cams.length ? 'Decision 1 checks each live frame the way a car would.' : 'No cameras near this route.');
+  x5.innerHTML = `<div class="cams">${cams.map(c => `<div><img src="/${c.frame}"><div class="c"><span>${esc((c.name.split(' -- ')[1] || c.name).slice(0, 22))}</span><span>${c.available ? esc(c.verdict.depth_label.split(',')[0]) : 'offline'}</span></div></div>`).join('')}</div>`;
+  await sleep(3000);
+  collapse(`<b>Live cameras</b> · ${cams.filter(c => c.available).length}/${cams.length} online`);
+  // 6: Genie simulation of the worst spot
+  if (P.flagged.length) {
+    const T = P.flagged[0];
+    map.flyTo([T.lat, T.lon], 15, {duration: 1});
+    say(`Simulating ${title(T.name)} at the time the car would get there…`);
+    const x6 = card('Step 6 · Simulating the worst spot with Genie 4', `${esc(title(T.name))}`, 'Genie 4 builds the street from a real image and plays tonight’s forecast forward to the minute the car would arrive. Decision 1 checks it the way a car would.');
+    x6.innerHTML = `<div class="shots"><div><img id="seedImg"><div class="c" id="seedC">seed image</div></div><div><img id="simImg"><div class="c" id="simC">Genie 4 · starting…</div></div></div><div id="simV"></div>`;
+    const simP = post('/api/trip/simulate');
+    // attach the live Genie stream once the session is up (retry until the first frame exists)
+    (async () => { for (let k = 0; k < 40; k++) { await sleep(700); const st = await fetch('/api/genie/status').then(r => r.json()).catch(() => ({}));
+        if (st.status === 'live') { if ($('simImg')) { $('simImg').src = '/api/genie/stream?ts=' + Date.now(); $('simC').textContent = 'Genie 4 · live'; } return; } } })();
+    const S = await simP;
+    if (S.error) { $('simV').innerHTML = `<p>${esc(S.error)}</p>`; }
+    else {
+      $('seedImg').src = '/' + S.seed_path; $('seedC').textContent = `${S.seed.kind} · ${title(S.seed.label)}${S.seed.dist_m ? ' · ' + S.seed.dist_m + ' m away' : ''}`;
+      $('simC').textContent = `Genie 4 · simulated ${hm(S.eta)} · ${S.total_s} s`;
+      const v = S.verdict || {}; const cls = v.action === 'avoid' ? 'p-stop' : v.action === 'slow' ? 'p-slow' : 'p-go';
+      $('simV').innerHTML = `<p style="margin-top:12px"><span class="pill ${cls}">${(v.action || '').toUpperCase()}</span>${esc(v.depth_label || '')}</p>${meters(v)}`;
+      setTimeout(() => { if (S.frame && $('simImg')) $('simImg').src = '/' + S.frame; }, 2500);
+      await sleep(3600);
+      collapse(`<b>Simulated ${esc(title(T.name))}</b> · ${esc(v.depth_label || '')}`);
+      // 7: final decision
+      const D = S.decision;
+      const x7 = card('Step 7 · Final decision · no human', esc(D.headline), `<span class="pill ${D.action === 'reroute' ? 'p-go' : 'p-info'}">${D.action === 'reroute' ? 'AVOID THIS SPOT' : 'KEEP PLAN'}</span>`);
+      x7.innerHTML = why(D) + `<p style="color:var(--text)">Rider: “${esc(D.rider_message)}”</p>`;
+      say(`Carbon: ${D.headline}`);
+    }
+  }
+  // drive the chosen route
+  map.flyToBounds(L.polyline(R.coords).getBounds(), {padding: [110, 110], duration: 1});
+  const car = L.marker(R.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+  state('driving'); const t0 = performance.now(), dur = 9000, m0 = toMin(R.times[0]), m1 = toMin(R.times.at(-1));
+  while (true) { const f = Math.min(1, (performance.now() - t0) / dur), i = Math.min(R.coords.length - 1, Math.floor(f * (R.coords.length - 1)));
+    car.setLatLng(R.coords[i]); $('clock').textContent = fmt(m0 + (m1 - m0) * f); if (f >= 1) break; await sleep(33); }
+  state('arrived'); say(`Arrived ${hm(R.times.at(-1))} · avoided every flagged street`);
+  running = false; $('go').disabled = false;
+}
+$('go').onclick = go;
+['from', 'to'].forEach(i => $(i).addEventListener('keydown', e => { if (e.key === 'Enter') go(); }));
+</script>
+</body>
+</html>

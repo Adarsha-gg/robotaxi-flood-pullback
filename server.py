@@ -23,7 +23,8 @@ PORT = int(os.environ.get("PORT", 8000))
 LOCK = threading.Lock()
 GENIE = {"session": None, "photo": None}
 RIDE = {}
-LIVE = {}  # one live Genie 4 world at a time (cost cap)
+LIVE = {}
+TRIP = {}  # one live Genie 4 world at a time (cost cap)
 
 
 def pick_photo(date, zone):
@@ -112,6 +113,9 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path == "/api/camera/incidents":
             from pipeline.camera import incidents
             return self.send_json(incidents(q.get("date", "2026-11-18")))
+        if u.path in ("/trip", "/trip.html"):
+            self.path = "/web/trip.html"
+            return super().do_GET()
         if u.path in ("/ride", "/ride.html"):
             self.path = "/web/ride.html"
             return super().do_GET()
@@ -212,6 +216,30 @@ class Handler(SimpleHTTPRequestHandler):
             final = route_b if dec["action"] == "reroute" else {**p["route_a"], "coords": p["route_a"]["coords"][idx:], "times": p["route_a"]["times"][idx:]}
             driven = p["route_a"]["coords"][:idx + 1] + final["coords"]
             return self.send_json({"route_b": final, "decision": dec, "proof": ride.proof(p, driven, p["t"])})
+        if u.path == "/api/trip/plan":
+            from pipeline import trip
+            try:
+                p = trip.plan(b.get("from", "Noe Valley"), b.get("to", "Moscone Center"), b.get("depart"))
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:200]}"}, 400)
+            TRIP.clear()
+            TRIP["plan"] = p
+            return self.send_json({k: v for k, v in p.items() if not k.startswith("_")})
+        if u.path == "/api/trip/eyes":
+            from concurrent.futures import ThreadPoolExecutor
+            from pipeline import live_ride as LR
+            cams = TRIP["plan"]["cams"][:6]
+            with ThreadPoolExecutor(6) as ex:
+                TRIP["cams"] = list(ex.map(LR.camera_now, cams))
+            return self.send_json(TRIP["cams"])
+        if u.path == "/api/trip/simulate":
+            from pipeline import trip
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            try:
+                return self.send_json(trip.simulate(TRIP["plan"], TRIP.get("cams", []), GENIE))
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/live/plan":
             from pipeline import live_ride as LR
             p = LR.plan_live(b.get("from", [37.7502, -122.4337]), b.get("to", [37.7840, -122.4010]), b.get("t"))
