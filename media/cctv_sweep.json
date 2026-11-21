@@ -1,0 +1,337 @@
+{
+  "ts": "2026-11-21T20:07:42Z",
+  "n_requested": 12,
+  "n_scanned": 12,
+  "n_failed": 0,
+  "n_avoid": 0,
+  "n_slow": 0,
+  "n_proceed": 12,
+  "wall_ms": 2027,
+  "summary": "12/12 live SF Caltrans highway cameras scanned in 2.03s \u00b7 0 avoid, 0 slow, 12 proceed",
+  "cameras": [
+    {
+      "id": "TVD01",
+      "name": "TVD01 -- I-80 : Fremont",
+      "route": "I-80",
+      "lat": 37.78537,
+      "lon": -122.39244,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tvd01i80fremont/tvd01i80fremont.jpg",
+      "verdict": {
+        "lane_covered": 0.3592,
+        "edges_hidden": 0.2747,
+        "depth_level": 4,
+        "p_tire_or_worse": 0.4616,
+        "flooded_p": 0.3592,
+        "depth_score": 0.5357,
+        "depth_label": "water at or above the wheel hub, stall risk for a car",
+        "action": "proceed",
+        "latency_ms": 1131,
+        "rubric": {
+          "lane_covered": 0.3592,
+          "edges_hidden": 0.2747,
+          "p_tire_or_worse": 0.4616,
+          "reaches_curb": 0.2747,
+          "sedan_stall": 0.4616,
+          "lane_visible": 0.7253
+        }
+      }
+    },
+    {
+      "id": "TV311",
+      "name": "TV311 -- US-101 : At Hospital Curve",
+      "route": "US-101",
+      "lat": 37.75936,
+      "lon": -122.4068,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv311us101athospitalcurve/tv311us101athospitalcurve.jpg",
+      "verdict": {
+        "lane_covered": 0.3174,
+        "edges_hidden": 0.2813,
+        "depth_level": 4,
+        "p_tire_or_worse": 0.423,
+        "flooded_p": 0.3174,
+        "depth_score": 0.4989,
+        "depth_label": "water at or above the wheel hub, stall risk for a car",
+        "action": "proceed",
+        "latency_ms": 1067,
+        "rubric": {
+          "lane_covered": 0.3174,
+          "edges_hidden": 0.2813,
+          "p_tire_or_worse": 0.423,
+          "reaches_curb": 0.2813,
+          "sedan_stall": 0.423,
+          "lane_visible": 0.7187
+        }
+      }
+    },
+    {
+      "id": "TV380",
+      "name": "TV380 -- US-101 : At 280 Split",
+      "route": "US-101",
+      "lat": 37.72781,
+      "lon": -122.4029,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv380us101at280split/tv380us101at280split.jpg",
+      "verdict": {
+        "lane_covered": 0.2928,
+        "edges_hidden": 0.24,
+        "depth_level": 4,
+        "p_tire_or_worse": 0.7009,
+        "flooded_p": 0.2928,
+        "depth_score": 0.7296,
+        "depth_label": "water at or above the wheel hub, stall risk for a car",
+        "action": "proceed",
+        "latency_ms": 888,
+        "rubric": {
+          "lane_covered": 0.2928,
+          "edges_hidden": 0.24,
+          "p_tire_or_worse": 0.7009,
+          "reaches_curb": 0.24,
+          "sedan_stall": 0.7009,
+          "lane_visible": 0.76
+        }
+      }
+    },
+    {
+      "id": "TV388",
+      "name": "TV388 -- SR-1 : Just South of Presidio Tunnel",
+      "route": "SR-1",
+      "lat": 37.79138,
+      "lon": -122.46968,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv388sr1justsouthofpresidiotunnel/tv388sr1justsouthofpresidiotunnel.jpg",
+      "verdict": {
+        "lane_covered": 0.2751,
+        "edges_hidden": 0.2651,
+        "depth_level": 4,
+        "p_tire_or_worse": 0.711,
+        "flooded_p": 0.2751,
+        "depth_score": 0.741,
+        "depth_label": "water at or above the wheel hub, stall risk for a car",
+        "action": "proceed",
+        "latency_ms": 1518,
+        "rubric": {
+          "lane_covered": 0.2751,
+          "edges_hidden": 0.2651,
+          "p_tire_or_worse": 0.711,
+          "reaches_curb": 0.2651,
+          "sedan_stall": 0.711,
+          "lane_visible": 0.7349
+        }
+      }
+    },
+    {
+      "id": "TVD34",
+      "name": "TVD34 -- I-80 : Skyway Curve",
+      "route": "I-80",
+      "lat": 37.818479,
+      "lon": -122.352466,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tvd34i80skywaycurve/tvd34i80skywaycurve.jpg",
+      "verdict": {
+        "lane_covered": 0.2355,
+        "edges_hidden": 0.3087,
+        "depth_level": 4,
+        "p_tire_or_worse": 0.7771,
+        "flooded_p": 0.2355,
+        "depth_score": 0.7943,
+        "depth_label": "water at or above the wheel hub, stall risk for a car",
+        "action": "proceed",
+        "latency_ms": 1117,
+        "rubric": {
+          "lane_covered": 0.2355,
+          "edges_hidden": 0.3087,
+          "p_tire_or_worse": 0.7771,
+          "reaches_curb": 0.3087,
+          "sedan_stall": 0.7771,
+          "lane_visible": 0.6913
+        }
+      }
+    },
+    {
+      "id": "TV305",
+      "name": "TV305 -- US-101 : Just North of Candlestick Park",
+      "route": "US-101",
+      "lat": 37.71069,
+      "lon": -122.39526,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv305us101justnorthofcandlestickpark/tv305us101justnorthofcandlestickpark.jpg",
+      "verdict": {
+        "lane_covered": 0.195,
+        "edges_hidden": 0.2434,
+        "depth_level": 1,
+        "p_tire_or_worse": 0.0435,
+        "flooded_p": 0.195,
+        "depth_score": 0.2061,
+        "depth_label": "wet road, thin film of water",
+        "action": "proceed",
+        "latency_ms": 1318,
+        "rubric": {
+          "lane_covered": 0.195,
+          "edges_hidden": 0.2434,
+          "p_tire_or_worse": 0.0435,
+          "reaches_curb": 0.2434,
+          "sedan_stall": 0.0435,
+          "lane_visible": 0.7566
+        }
+      }
+    },
+    {
+      "id": "TV301",
+      "name": "TV301 -- US-101 : At Octavia St",
+      "route": "US-101",
+      "lat": 37.77146,
+      "lon": -122.42323,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv301us101atoctaviast/tv301us101atoctaviast.jpg",
+      "verdict": {
+        "lane_covered": 0.1767,
+        "edges_hidden": 0.2315,
+        "depth_level": 1,
+        "p_tire_or_worse": 0.0606,
+        "flooded_p": 0.1767,
+        "depth_score": 0.2441,
+        "depth_label": "wet road, thin film of water",
+        "action": "proceed",
+        "latency_ms": 766,
+        "rubric": {
+          "lane_covered": 0.1767,
+          "edges_hidden": 0.2315,
+          "p_tire_or_worse": 0.0606,
+          "reaches_curb": 0.2315,
+          "sedan_stall": 0.0606,
+          "lane_visible": 0.7685
+        }
+      }
+    },
+    {
+      "id": "TV314",
+      "name": "TV314 -- I-280 : At Indiana St",
+      "route": "I-280",
+      "lat": 37.756079,
+      "lon": -122.39198,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv314i280atindianast/tv314i280atindianast.jpg",
+      "verdict": {
+        "lane_covered": 0.1446,
+        "edges_hidden": 0.2335,
+        "depth_level": 0,
+        "p_tire_or_worse": 0.0248,
+        "flooded_p": 0.1446,
+        "depth_score": 0.1067,
+        "depth_label": "dry or damp road",
+        "action": "proceed",
+        "latency_ms": 914,
+        "rubric": {
+          "lane_covered": 0.1446,
+          "edges_hidden": 0.2335,
+          "p_tire_or_worse": 0.0248,
+          "reaches_curb": 0.2335,
+          "sedan_stall": 0.0248,
+          "lane_visible": 0.7665
+        }
+      }
+    },
+    {
+      "id": "TV326",
+      "name": "TV326 -- I-280 : Just south of Cesar Chavez",
+      "route": "I-280",
+      "lat": 37.7453,
+      "lon": -122.39498,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv326i280justsouthofcesarchavez/tv326i280justsouthofcesarchavez.jpg",
+      "verdict": {
+        "lane_covered": 0.1363,
+        "edges_hidden": 0.2163,
+        "depth_level": 1,
+        "p_tire_or_worse": 0.0577,
+        "flooded_p": 0.1363,
+        "depth_score": 0.2147,
+        "depth_label": "wet road, thin film of water",
+        "action": "proceed",
+        "latency_ms": 704,
+        "rubric": {
+          "lane_covered": 0.1363,
+          "edges_hidden": 0.2163,
+          "p_tire_or_worse": 0.0577,
+          "reaches_curb": 0.2163,
+          "sedan_stall": 0.0577,
+          "lane_visible": 0.7837
+        }
+      }
+    },
+    {
+      "id": "TV327",
+      "name": "TV327 -- I-280 : John Daly Blvd",
+      "route": "I-280",
+      "lat": 37.71046,
+      "lon": -122.4654,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv327i280johndalyblvd/tv327i280johndalyblvd.jpg",
+      "verdict": {
+        "lane_covered": 0.1357,
+        "edges_hidden": 0.2049,
+        "depth_level": 0,
+        "p_tire_or_worse": 0.0597,
+        "flooded_p": 0.1357,
+        "depth_score": 0.208,
+        "depth_label": "dry or damp road",
+        "action": "proceed",
+        "latency_ms": 1019,
+        "rubric": {
+          "lane_covered": 0.1357,
+          "edges_hidden": 0.2049,
+          "p_tire_or_worse": 0.0597,
+          "reaches_curb": 0.2049,
+          "sedan_stall": 0.0597,
+          "lane_visible": 0.7951
+        }
+      }
+    },
+    {
+      "id": "TV316",
+      "name": "TV316 -- I-80 : 6th Street",
+      "route": "I-80",
+      "lat": 37.77696,
+      "lon": -122.40347,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv316i806thstreet/tv316i806thstreet.jpg",
+      "verdict": {
+        "lane_covered": 0.1352,
+        "edges_hidden": 0.1788,
+        "depth_level": 0,
+        "p_tire_or_worse": 0.0354,
+        "flooded_p": 0.1352,
+        "depth_score": 0.1426,
+        "depth_label": "dry or damp road",
+        "action": "proceed",
+        "latency_ms": 873,
+        "rubric": {
+          "lane_covered": 0.1352,
+          "edges_hidden": 0.1788,
+          "p_tire_or_worse": 0.0354,
+          "reaches_curb": 0.1788,
+          "sedan_stall": 0.0354,
+          "lane_visible": 0.8212
+        }
+      }
+    },
+    {
+      "id": "TV306",
+      "name": "TV306 -- I-280 :  AT MISSION ST",
+      "route": "I-280",
+      "lat": 37.732,
+      "lon": -122.4285,
+      "image": "https://cwwp2.dot.ca.gov/data/d4/cctv/image/tv306i280atmissionst/tv306i280atmissionst.jpg",
+      "verdict": {
+        "lane_covered": 0.1061,
+        "edges_hidden": 0.1917,
+        "depth_level": 0,
+        "p_tire_or_worse": 0.0187,
+        "flooded_p": 0.1061,
+        "depth_score": 0.0988,
+        "depth_label": "dry or damp road",
+        "action": "proceed",
+        "latency_ms": 1055,
+        "rubric": {
+          "lane_covered": 0.1061,
+          "edges_hidden": 0.1917,
+          "p_tire_or_worse": 0.0187,
+          "reaches_curb": 0.1917,
+          "sedan_stall": 0.0187,
+          "lane_visible": 0.8083
+        }
+      }
+    }
+  ]
+}
