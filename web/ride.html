@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flood Pull-Back · Ride</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{--bg:#07090c;--panel:#0e1217;--panel2:#131922;--line:#1f2630;--text:#eef1f5;--muted:#8b94a3;--dim:#5b6472;
+  --blue:#4da3ff;--cyan:#38e1ff;--red:#ff4d5e;--amber:#ffb020;--green:#2fd18b}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif;overflow:hidden}
+.app{display:grid;grid-template-columns:1fr 440px;height:100vh}
+#map{height:100%;background:var(--bg)}
+.leaflet-container{background:var(--bg);font-family:Inter,system-ui,sans-serif}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace}
+/* overlays */
+.top{position:absolute;left:16px;top:16px;z-index:500;display:flex;gap:10px;align-items:stretch;pointer-events:none}
+.chip{background:rgba(14,18,23,.88);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:10px 14px;pointer-events:auto}
+.brand{font-weight:800;letter-spacing:-.01em}.brand b{color:var(--cyan)}
+.clock{font:700 28px/1 "JetBrains Mono",monospace;letter-spacing:.02em}
+.sub{color:var(--muted);font-size:12px}
+.trip{min-width:280px}
+.trip .ab{display:flex;align-items:center;gap:8px;font-weight:600}
+.dotA,.dotB{width:9px;height:9px;border-radius:50%;display:inline-block}
+.dotA{background:var(--cyan)}.dotB{background:#fff}
+.alert{position:absolute;left:50%;top:96px;transform:translateX(-50%);z-index:600;background:rgba(58,16,20,.95);border:1px solid var(--red);
+  color:#ffd9dc;border-radius:12px;padding:10px 16px;font-weight:600;display:none;box-shadow:0 10px 40px rgba(255,77,94,.25)}
+.alert.blue{background:rgba(10,30,52,.95);border-color:var(--blue);color:#d7eaff;box-shadow:0 10px 40px rgba(77,163,255,.25)}
+.counter{position:absolute;left:16px;bottom:16px;z-index:500;display:none;gap:10px}
+.counter .chip{min-width:180px}
+.counter b{font:700 30px/1 "JetBrains Mono",monospace;display:block}
+.legend{position:absolute;right:456px;bottom:16px;z-index:500;font-size:12px;color:var(--muted)}
+/* brain panel */
+aside{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.ahead{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.ahead h2{margin:0;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.btn{background:var(--cyan);color:#001018;border:0;border-radius:10px;padding:9px 16px;font-weight:700;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn:disabled{opacity:.4;cursor:default}
+.steps{flex:1;overflow:auto;padding:12px 14px 18px}
+.step{position:relative;margin:0 0 12px 18px;padding:12px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;
+  opacity:.25;transform:translateY(4px);transition:all .4s}
+.step.on{opacity:1;transform:none}
+.step.now{border-color:var(--cyan);box-shadow:0 0 0 1px rgba(56,225,255,.25)}
+.step::before{content:"";position:absolute;left:-18px;top:16px;width:9px;height:9px;border-radius:50%;background:var(--dim)}
+.step.on::before{background:var(--cyan)}
+.step::after{content:"";position:absolute;left:-14px;top:30px;bottom:-14px;width:1px;background:var(--line)}
+.step:last-child::after{display:none}
+.step .k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between}
+.step .h{font-size:16px;font-weight:700;margin:4px 0 2px}
+.step .p{color:var(--muted);font-size:13px}
+.tag{font:600 11px "JetBrains Mono",monospace;padding:2px 7px;border-radius:6px;background:#0b2233;color:var(--cyan)}
+.tag.red{background:#3a1014;color:#ff8a95}.tag.green{background:#0b2a1e;color:var(--green)}.tag.amber{background:#33260a;color:var(--amber)}
+.rain{display:flex;gap:4px;align-items:flex-end;height:44px;margin-top:8px}
+.rain div{flex:1;background:var(--blue);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.rain div span{position:absolute;bottom:-16px;left:0;right:0;text-align:center;font-size:10px;color:var(--dim)}
+.hist{margin-top:8px;display:flex;flex-wrap:wrap;gap:5px}
+.sim{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:8px}
+.sim img{width:100%;border-radius:8px;border:1px solid var(--line);aspect-ratio:16/10;object-fit:cover;background:#000;display:block}
+.sim .cap{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:.06em;text-transform:uppercase}
+.gauge{height:8px;border-radius:5px;background:#000;border:1px solid var(--line);overflow:hidden;margin-top:8px}
+.gauge div{height:100%;width:0;background:var(--red);transition:width .6s}
+.big{font:800 22px/1.1 Inter;letter-spacing:-.01em}
+.foot{padding:10px 16px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
+@media (max-width:1000px){.app{grid-template-columns:1fr;grid-template-rows:55vh 45vh}.legend{right:16px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div style="position:relative">
+    <div id="map"></div>
+    <div class="top">
+      <div class="chip"><div class="brand">Flood <b>Pull-Back</b></div><div class="sub">San Francisco · Wed Nov 18, 2026 · real data replay</div></div>
+      <div class="chip"><div class="clock" id="clock">09:00</div><div class="sub" id="speed">ride clock</div></div>
+      <div class="chip trip"><div class="ab"><span class="dotA"></span><span id="fromName">Stanyan &amp; Fell</span> → <span class="dotB"></span><span id="toName">Chase Center</span></div>
+        <div class="sub" id="tripSub">Robotaxi W-112 · 1 rider</div></div>
+    </div>
+    <div class="alert" id="alert"></div>
+    <div class="counter" id="counter">
+      <div class="chip"><span class="sub">Real 311 floods on the OLD route</span><b id="cOld" style="color:var(--red)">0</b></div>
+      <div class="chip"><span class="sub">Real 311 floods on the NEW route</span><b id="cNew" style="color:var(--green)">0</b></div>
+    </div>
+    <div class="legend chip"><span style="color:#fff">━</span> planned route &nbsp; <span style="color:var(--red)">┅</span> abandoned &nbsp; <span style="color:var(--green)">━</span> flood-aware &nbsp; <span style="color:var(--amber)">■</span> flood-prone block</div>
+  </div>
+  <aside>
+    <div class="ahead"><h2>Robotaxi brain</h2><div><button class="btn ghost" id="reset">Reset</button> <button class="btn" id="go">▶ Start ride</button></div></div>
+    <div class="steps" id="steps">
+      <div class="step" id="s1"><div class="k">01 · Trip planned <span class="tag" id="s1t">--</span></div><div class="h" id="s1h">Fastest route</div><div class="p" id="s1p">Waiting to start.</div></div>
+      <div class="step" id="s2"><div class="k">02 · Forecast update <span class="tag amber">in-ride</span></div><div class="h" id="s2h">–</div><div class="p" id="s2p"></div><div class="rain" id="rain"></div></div>
+      <div class="step" id="s3"><div class="k">03 · Flood memory ahead <span class="tag">31,591 reports · 2008–2026</span></div><div class="h" id="s3h">–</div><div class="p" id="s3p"></div><div class="hist" id="hist"></div></div>
+      <div class="step" id="s4"><div class="k">04 · Simulate the street ahead <span class="tag">Genie 4 → Decision 1</span></div><div class="h" id="s4h">–</div><div class="p" id="s4p"></div>
+        <div class="sim"><div><img id="realImg"><div class="cap">Real resident photo · 311</div></div><div><img id="simImg"><div class="cap" id="simCap">Genie 4 world under the forecast rain</div></div></div>
+        <div class="gauge"><div id="gauge"></div></div></div>
+      <div class="step" id="s5"><div class="k">05 · Decision <span class="tag" id="s5t">--</span></div><div class="h big" id="s5h">–</div><div class="p" id="s5p"></div></div>
+      <div class="step" id="s6"><div class="k">06 · What really happened <span class="tag green">real 311 reports</span></div><div class="h" id="s6h">–</div><div class="p" id="s6p"></div></div>
+    </div>
+    <div class="foot">Data: SF 311 flooding reports (DataSF) · Open-Meteo forecast runs · Waymo CPUC 2026 Q3 filing · Gemini 4: Genie 4, Decision 1, Carbon. Simulated scenes are illustrations from real photos, not measurements.</div>
+  </aside>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const FROM = [37.7715, -122.4545], TO = [37.7700, -122.3910], T0 = '2026-11-18T09:00';
+const MIN_MS = 1400;            // 1 ride-minute on screen
+const j = (u, b) => fetch(u, b ? {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)} : undefined).then(r => r.json());
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hm = t => t.slice(11, 16);
+const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
+const fmt = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+const title = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase()).replace(' And ', ' & ');
+
+const map = L.map('map', {zoomControl: false, attributionControl: false, preferCanvas: true}).setView([37.772, -122.42], 14);
+const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+L.tileLayer(esri + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16}).addTo(map);
+L.tileLayer(esri + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {maxZoom: 16, opacity: .8}).addTo(map);
+const lay = {route: L.layerGroup().addTo(map), cells: L.layerGroup().addTo(map), ev: L.layerGroup().addTo(map), car: L.layerGroup().addTo(map), fx: L.layerGroup().addTo(map)};
+let plan = null, grid = null, carM = null, running = false;
+
+function on(id, now = true) { document.querySelectorAll('.step').forEach(s => s.classList.remove('now')); $(id).classList.add('on'); if (now) $(id).classList.add('now'); $(id).scrollIntoView({behavior: 'smooth', block: 'nearest'}); }
+function alertMsg(text, blue) { const a = $('alert'); a.textContent = text; a.classList.toggle('blue', !!blue); a.style.display = 'block'; }
+function cellRect(cid) { const [r, c] = cid.slice(1).split('_c').map(Number); const la = grid.lat0 + r * grid.dlat, lo = grid.lon0 + c * grid.dlon; return [[la, lo], [la + grid.dlat, lo + grid.dlon]]; }
+function setClock(m) { $('clock').textContent = fmt(m); }
+
+function carIcon() { return L.divIcon({className: '', iconSize: [22, 22], html: '<div style="width:22px;height:22px;border-radius:50%;background:#38e1ff;box-shadow:0 0 0 5px rgba(56,225,255,.25),0 0 24px #38e1ff;border:2px solid #fff"></div>'}); }
+
+async function drive(coords, times, fromIdx, toIdx, onTick) {
+  // clock-driven: position = f(elapsed wall time), so throttled frames never slow the ride down
+  const mins = times.map(toMin), m0 = mins[fromIdx], m1 = mins[toIdx];
+  const T = Math.max(1, (m1 - m0) * MIN_MS), t0 = performance.now();
+  let i = fromIdx;
+  while (running) {
+    const f = Math.min(1, (performance.now() - t0) / T), m = m0 + (m1 - m0) * f;
+    while (i < toIdx - 1 && mins[i + 1] < m) i++;
+    const g = Math.min(1, Math.max(0, (m - mins[i]) / ((mins[i + 1] - mins[i]) || 1)));
+    const a = coords[i], b = coords[Math.min(i + 1, toIdx)];
+    carM.setLatLng([a[0] + (b[0] - a[0]) * g, a[1] + (b[1] - a[1]) * g]);
+    setClock(m); if (onTick) onTick(m);
+    if (f >= 1) break;
+    await sleep(33);
+  }
+}
+
+async function start() {
+  running = true; $('go').disabled = true;
+  if (!grid) grid = (await j('/data/cells.json')).grid;
+  $('s1p').textContent = 'Planning…'; on('s1');
+  plan = await j('/api/ride/plan', {from: FROM, to: TO, t: T0});
+  const R = plan.route, w = plan.watch;
+  const base = L.polyline(R.coords, {color: '#ffffff', weight: 5, opacity: .9}).addTo(lay.route);
+  map.fitBounds(base.getBounds(), {padding: [90, 90]});
+  carM = L.marker(R.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+  L.circleMarker(R.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.route);
+  $('s1t').textContent = `${R.km} km · ${Math.round(R.min)} min`;
+  $('s1h').textContent = `ETA ${hm(R.times.at(-1))} via the fastest route`;
+  $('s1p').textContent = `Pickup at ${hm(R.times[0])}. Heavy rain has been falling since 4 AM.`;
+  await sleep(1200);
+
+  // drive until the forecast update arrives
+  await drive(R.coords, R.times, 0, plan.decide_index);
+  if (!running) return;
+
+  // 02 forecast update
+  const W = plan.warning;
+  alertMsg(`⚠ Forecast update: ${W.peak.mm} mm/h of rain at ${hm(W.peak.t)} over the route ahead`);
+  on('s2');
+  $('s2h').textContent = `${W.peak.mm} mm in one hour at ${hm(W.peak.t)}`;
+  $('s2p').textContent = `Latest model run (Open-Meteo). 6-hour total reaching ${plan.forecast_6h_mm} mm on already-saturated streets.`;
+  const mx = Math.max(...W.next_hours.map(h => h.mm), 1);
+  $('rain').innerHTML = W.next_hours.map(h => `<div style="height:${Math.max(4, h.mm / mx * 100)}%"><span>${hm(h.t)}</span></div>`).join('');
+  L.circle([w.lat, w.lon], {radius: 900, color: '#4da3ff', weight: 1, fillColor: '#4da3ff', fillOpacity: .08, dashArray: '4 6'}).addTo(lay.fx);
+  await sleep(2600);
+
+  // 03 flood memory ahead
+  on('s3');
+  for (const r of plan.risky_detail) L.rectangle(cellRect(r.cell), {color: '#ffb020', weight: 1.5, fillColor: '#ffb020', fillOpacity: .45}).addTo(lay.cells);
+  $('s3h').textContent = `${title(w.name)} flooded on ${w.n_storm_days} past storms`;
+  $('s3p').textContent = `${plan.risky_detail.length} blocks on this route have a long flood record, and the forecast is above their flood threshold. You would reach ${title(w.name)} at ${hm(w.eta)}.`;
+  $('hist').innerHTML = w.storm_days.map(d => `<span class="tag amber">${d}</span>`).join('') + (w.n_storm_days > 5 ? `<span class="tag">+${w.n_storm_days - 5} more</span>` : '');
+  map.flyTo([w.lat, w.lon], 15, {duration: 1.2});
+  await sleep(2400);
+
+  // 04 simulate with Genie 4 + Decision 1
+  on('s4');
+  $('s4h').textContent = `Simulating ${title(w.name)} at ${hm(W.peak.t)}…`;
+  $('s4p').textContent = `Genie 4 builds the street from a real resident photo ${w.photo.dist_m} m away and plays the forecast forward.`;
+  $('realImg').src = '/' + w.photo.path;
+  const simP = j('/api/ride/simulate', {});
+  await sleep(1500);
+  $('simImg').src = '/api/genie/stream?ts=' + Date.now();
+  const sim = await simP;
+  if (sim.error) { $('s4p').textContent = sim.error; return; }
+  const v = sim.verdict, pct = Math.round((v.flooded_p || 0) * 100);
+  $('gauge').style.width = pct + '%';
+  $('s4h').innerHTML = `Decision 1 on the simulated frame: <span style="color:${pct >= 60 ? 'var(--red)' : 'var(--green)'}">${pct >= 60 ? 'FLOODED' : 'passable'} ${pct}%</span> · depth: ${v.depth_label}`;
+  $('s4p').textContent = `Whole check took ${sim.total_s} s (Genie first frame ${sim.genie_first_frame_s} s, Decision 1 ${v.latency_ms} ms).`;
+  $('simCap').textContent = `Genie 4 · simulated ${hm(W.peak.t)} · ${sim.frames_seen} frames`;
+  await sleep(2600);
+
+  // 05 decide + reroute
+  on('s5');
+  if (pct < 60) { $('s5h').textContent = 'Keep the route'; $('s5p').textContent = 'Simulation says passable.'; }
+  const rr = await j('/api/ride/reroute', {});
+  setTimeout(() => { $('simImg').src = '/' + (sim.frame || ''); }, 300);
+  const S = rr.safe, P = rr.proof;
+  lay.route.clearLayers();
+  L.polyline(R.coords, {color: '#ff4d5e', weight: 4, opacity: .85, dashArray: '8 8'}).addTo(lay.route);
+  L.polyline(R.coords.slice(0, plan.decide_index + 1), {color: '#ffffff', weight: 5, opacity: .9}).addTo(lay.route);
+  const sp = L.polyline(S.coords, {color: '#2fd18b', weight: 6, opacity: .95}).addTo(lay.route);
+  L.circleMarker(R.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.route);
+  map.flyToBounds(L.featureGroup([sp, L.polyline(R.coords)]).getBounds(), {padding: [90, 90], duration: 1});
+  $('s5t').className = 'tag green'; $('s5t').textContent = `${S.added_min >= 0 ? '+' : ''}${S.added_min} min`;
+  $('s5h').textContent = `Reroute: avoid ${plan.risky_detail.length} flood-prone blocks`;
+  $('s5p').textContent = `New ETA ${hm(S.times.at(-1))}. The rider is told why. The fleet map marks ${title(w.name)} closed until the rain eases.`;
+  alertMsg(`↻ Rerouted around ${title(w.name)} · ${S.added_min >= 0 ? '+' : ''}${S.added_min} min`, true);
+  await sleep(1800);
+
+  // keep driving on the new route; real floods start landing
+  $('counter').style.display = 'flex';
+  const oldSet = new Set(P.old_route.map(e => e.t + e.lat)), all = [...P.old_route, ...P.new_route.filter(e => !oldSet.has(e.t + e.lat))];
+  const shown = new Set();
+  const tick = m => {
+    for (const e of all) {
+      const k = e.t + e.lat; if (shown.has(k) || toMin(e.t) > m) continue; shown.add(k);
+      const isOld = oldSet.has(k);
+      L.circleMarker([e.lat, e.lon], {radius: 6, color: isOld ? '#ff4d5e' : '#2fd18b', weight: 2, fillColor: isOld ? '#ff4d5e' : '#2fd18b', fillOpacity: .7})
+        .bindTooltip(`${hm(e.t)} · ${esc(e.address)} (real 311 report)`).addTo(lay.ev);
+    }
+    $('cOld').textContent = P.old_route.filter(e => toMin(e.t) <= m).length;
+    $('cNew').textContent = P.new_route.filter(e => toMin(e.t) <= m).length;
+    if (m >= 11 * 60 && m < 11 * 60 + 40) alertMsg('11:00 · Waymo paused all San Francisco service after cars got stuck in floods');
+  };
+  await drive(S.coords, S.times, 0, S.coords.length - 1, tick);
+  if (!running) return;
+  alertMsg(`✓ Arrived ${hm(S.times.at(-1))} · rider dry · car not stranded`, true);
+  // fast-forward the next hours of real reports
+  const endM = toMin(P.window[1]), startM = toMin(S.times.at(-1));
+  for (let m = startM; m <= endM && running; m += 1.5) { setClock(m); tick(m); await sleep(40); }
+
+  // 06 what really happened
+  on('s6');
+  const firstOld = P.old_route.slice().sort((a, b) => a.t < b.t ? -1 : 1)[0];
+  $('s6h').textContent = `${P.old_n} real floods were reported on the old route, ${P.new_n} on the new one`;
+  $('s6p').textContent = `Window ${hm(P.window[0])}–${hm(P.window[1])}. First report on the abandoned route: ${firstOld ? hm(firstOld.t) + ' at ' + title(firstOld.address) : '–'}. At 11:00 Waymo paused the whole city; this car never had to stop.`;
+  $('go').disabled = false; $('go').textContent = '▶ Replay';
+}
+
+function reset() {
+  running = false; Object.values(lay).forEach(l => l.clearLayers());
+  document.querySelectorAll('.step').forEach(s => s.classList.remove('on', 'now'));
+  $('alert').style.display = 'none'; $('counter').style.display = 'none'; setClock(540);
+  $('go').disabled = false; $('go').textContent = '▶ Start ride';
+  ['simImg', 'realImg'].forEach(i => $(i).removeAttribute('src')); $('gauge').style.width = 0;
+  fetch('/api/genie/stop', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+}
+$('go').onclick = () => { reset(); start(); };
+$('reset').onclick = reset;
+</script>
+</body>
+</html>

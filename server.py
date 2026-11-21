@@ -20,7 +20,8 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(ROOT, "data")
 PORT = int(os.environ.get("PORT", 8000))
 LOCK = threading.Lock()
-GENIE = {"session": None, "photo": None}  # one live Genie 4 world at a time (cost cap)
+GENIE = {"session": None, "photo": None}
+RIDE = {}  # one live Genie 4 world at a time (cost cap)
 
 
 def pick_photo(date, zone):
@@ -111,6 +112,9 @@ class Handler(SimpleHTTPRequestHandler):
         if u.path == "/api/camera/incidents":
             from pipeline.camera import incidents
             return self.send_json(incidents(q.get("date", "2026-11-18")))
+        if u.path in ("/ride", "/ride.html"):
+            self.path = "/web/ride.html"
+            return super().do_GET()
         if u.path in ("/cam", "/cam.html"):
             self.path = "/web/cam.html"
             return super().do_GET()
@@ -162,6 +166,30 @@ class Handler(SimpleHTTPRequestHandler):
                 with open(path, "w") as f:
                     json.dump(ap, f)
             return self.send_json({"ok": True, "updated": len(ids)})
+        if u.path == "/api/ride/plan":
+            from pipeline import ride
+            p = ride.plan(b.get("from", [37.7715, -122.4545]), b.get("to", [37.7700, -122.3910]),
+                          b.get("t", "2026-11-18T09:00"), b.get("date", "2026-11-18"))
+            RIDE["plan"] = p
+            return self.send_json(p)
+        if u.path == "/api/ride/simulate":
+            from pipeline import ride
+            p = RIDE.get("plan")
+            if not p or not p.get("watch"):
+                return self.send_json({"error": "plan a ride first"}, 400)
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            try:
+                return self.send_json(ride.simulate(p["watch"], p["warning"], GENIE))
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
+        if u.path == "/api/ride/reroute":
+            from pipeline import ride
+            p = RIDE.get("plan")
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            safe = ride.reroute(p, p["decide_index"])
+            return self.send_json({"safe": safe, "proof": ride.proof(p, safe, p["decide_t"])})
         if u.path == "/api/genie/start":
             from gem.world import GenieSession, DEFAULT_PROMPT
             date, zset = b.get("date", "2026-11-18"), b.get("set", "carbon")
