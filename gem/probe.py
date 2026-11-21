@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+import warnings
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from google.genai import types
@@ -28,50 +28,65 @@ def _truncate(text: str, limit: int = 160) -> str:
 
 
 async def _probe_genie4_async(max_seconds: float = 4.5) -> ProbeResult:
-    """Open a minimal Genie 4 live session, wait for first video/image frame (strictly <= 5s)."""
+    """Open a minimal Genie 4 live session via Interactions API (strictly <= 5s)."""
     t0 = time.perf_counter()
-    client = get_beta_client()
-    config = types.LiveConnectConfig(
-        response_modalities=[types.Modality.VIDEO],
-    )
+    beta_client = get_beta_client()
+    interaction_id: str | None = None
     frame_count = 0
     total_bytes = 0
     mime_types: set[str] = set()
-    text_snippets: list[str] = []
+    event_types: list[str] = []
 
     try:
+        interaction = beta_client.interactions.create(
+            model="genie-4",
+            background=True,
+        )
+        interaction_id = getattr(interaction, "id", None)
+        if not interaction_id:
+            return ProbeResult(
+                surface="genie-4",
+                passed=False,
+                latency_s=time.perf_counter() - t0,
+                detail=f"No interaction id returned: {_truncate(str(interaction), 120)}",
+            )
+
         async with asyncio.timeout(max_seconds):
-            async with client.aio.live.connect(model="genie-4", config=config) as session:
-                await session.send_client_content(
-                    turns=types.Content(
-                        role="user",
-                        parts=[
-                            types.Part(
-                                text=(
-                                    "A flooded San Francisco street in heavy rain, "
-                                    "ankle-deep standing water on asphalt reflecting streetlights."
-                                )
-                            )
-                        ],
-                    ),
-                    turn_complete=True,
-                )
-                async for msg in session.receive():
-                    sc = getattr(msg, "server_content", None)
-                    mt = getattr(sc, "model_turn", None) if sc else None
-                    if mt and getattr(mt, "parts", None):
-                        for part in mt.parts:
-                            inline = getattr(part, "inline_data", None)
-                            if inline and getattr(inline, "data", None):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                conn_ctx = beta_client.aio.interactions.connect(interaction_id)
+            async with conn_ctx as conn:
+                try:
+                    await conn.send(
+                        {
+                            "event_type": "world_setup",
+                            "world_prompt": (
+                                "A flooded San Francisco street in heavy rain, "
+                                "ankle-deep standing water on asphalt reflecting streetlights."
+                            ),
+                        }
+                    )
+                    async for event in conn.receive():
+                        etype = getattr(event, "event_type", type(event).__name__)
+                        event_types.append(str(etype))
+                        delta = getattr(event, "delta", None)
+                        if delta is not None:
+                            data = getattr(delta, "data", None)
+                            if data:
                                 frame_count += 1
-                                total_bytes += len(inline.data)
-                                if inline.mime_type:
-                                    mime_types.add(inline.mime_type)
-                            elif getattr(part, "text", None):
-                                text_snippets.append(part.text)
-                    # Stop immediately once we receive at least one media frame to keep cost minimal.
-                    if frame_count >= 1:
-                        break
+                                total_bytes += len(data)
+                                mt = getattr(delta, "mime_type", None) or getattr(delta, "type", None)
+                                if mt:
+                                    mime_types.add(str(mt))
+                        if frame_count >= 1:
+                            break
+                        if str(etype) in ("error", "interaction.completed", "interaction.cancelled"):
+                            break
+                finally:
+                    try:
+                        await conn.cancel()
+                    except Exception:
+                        pass
     except TimeoutError:
         elapsed = time.perf_counter() - t0
         if frame_count >= 1:
@@ -85,7 +100,7 @@ async def _probe_genie4_async(max_seconds: float = 4.5) -> ProbeResult:
             surface="genie-4",
             passed=False,
             latency_s=elapsed,
-            detail=f"Timeout after {max_seconds:.1f}s with 0 frames (text={_truncate(' '.join(text_snippets), 80)})",
+            detail=f"Timeout after {max_seconds:.1f}s with 0 frames (events={event_types[:6]})",
         )
     except Exception as exc:
         return ProbeResult(
@@ -94,6 +109,12 @@ async def _probe_genie4_async(max_seconds: float = 4.5) -> ProbeResult:
             latency_s=time.perf_counter() - t0,
             detail=f"{type(exc).__name__}: {_truncate(str(exc))}",
         )
+    finally:
+        if interaction_id:
+            try:
+                beta_client.interactions.cancel(interaction_id)
+            except Exception:
+                pass
 
     elapsed = time.perf_counter() - t0
     if frame_count >= 1:
@@ -107,7 +128,7 @@ async def _probe_genie4_async(max_seconds: float = 4.5) -> ProbeResult:
         surface="genie-4",
         passed=False,
         latency_s=elapsed,
-        detail=f"Session closed with 0 media frames (text={_truncate(' '.join(text_snippets), 80)})",
+        detail=f"Closed with 0 frames (events={event_types[:8]})",
     )
 
 
@@ -133,19 +154,15 @@ def probe_managed_agents() -> ProbeResult:
         )
         elapsed = time.perf_counter() - t0
         status = getattr(interaction, "status", None)
-        outputs = getattr(interaction, "outputs", None) or []
-        out_text = ""
-        for item in outputs:
-            txt = getattr(item, "text", None)
-            if txt:
-                out_text += txt + " "
-        if not out_text:
-            out_text = str(interaction)[:120]
+        steps = getattr(interaction, "steps", None) or []
+        out_text = getattr(interaction, "output_text", None) or ""
+        step_types = [getattr(s, "type", type(s).__name__) for s in steps]
+        passed = status in ("completed", "incomplete") and (bool(out_text) or len(steps) > 0)
         return ProbeResult(
             surface="managed-agents",
-            passed=True,
+            passed=passed,
             latency_s=elapsed,
-            detail=f"status={status}, out={_truncate(out_text, 100)}",
+            detail=f"status={status}, steps={len(steps)} {step_types[:4]}, text={_truncate(out_text or '(none)', 70)}",
         )
     except Exception as exc:
         return ProbeResult(
@@ -182,31 +199,68 @@ def _summarize_response_parts(resp: Any) -> tuple[int, list[str], int, str]:
 
 
 def probe_omni() -> ProbeResult:
-    """Minimal call to gemini-omni-1.2-flash for a short video clip."""
+    """Minimal call to gemini-omni-1.2-flash via Interactions API for a short video clip."""
     t0 = time.perf_counter()
-    client = get_beta_client()
+    beta_client = get_beta_client()
     try:
-        resp = client.models.generate_content(
+        interaction = beta_client.interactions.create(
             model="gemini-omni-1.2-flash",
-            contents="A 2-second clip of a flooded San Francisco street in heavy rain.",
-            config=types.GenerateContentConfig(
-                response_modalities=["VIDEO"],
-            ),
+            input="A 2-second clip of a flooded San Francisco street in heavy rain.",
+            response_modalities=["video"],
+            generation_config={"video_config": {"task": "text_to_video"}},
+            timeout=90.0,
         )
         elapsed = time.perf_counter() - t0
-        media_count, mimes, total_bytes, text = _summarize_response_parts(resp)
+        status = getattr(interaction, "status", None)
+        videos = getattr(interaction, "output_video", None) or []
+        if not isinstance(videos, list):
+            videos = [videos]
+        media_count = 0
+        mimes: list[str] = []
+        total_bytes = 0
+        uris: list[str] = []
+        for item in videos:
+            data = getattr(item, "data", None)
+            uri = getattr(item, "uri", None)
+            mime = getattr(item, "mime_type", None) or getattr(item, "type", None)
+            if data or uri:
+                media_count += 1
+                if data:
+                    total_bytes += len(data)
+                if uri:
+                    uris.append(str(uri))
+                if mime:
+                    mimes.append(str(mime))
+        if media_count == 0:
+            for step in getattr(interaction, "steps", None) or []:
+                content = getattr(step, "content", None) or []
+                if not isinstance(content, list):
+                    content = [content]
+                for part in content:
+                    data = getattr(part, "data", None)
+                    uri = getattr(part, "uri", None)
+                    mime = getattr(part, "mime_type", None) or getattr(part, "type", None)
+                    if data or uri:
+                        media_count += 1
+                        if data:
+                            total_bytes += len(data)
+                        if uri:
+                            uris.append(str(uri))
+                        if mime:
+                            mimes.append(str(mime))
         if media_count >= 1:
+            extra = f"uri={_truncate(uris[0], 50)}" if uris and not total_bytes else f"bytes={total_bytes}"
             return ProbeResult(
                 surface="gemini-omni-1.2-flash",
                 passed=True,
                 latency_s=elapsed,
-                detail=f"parts={media_count}, bytes={total_bytes}, mimes={mimes}",
+                detail=f"status={status}, videos={media_count}, {extra}, mimes={sorted(set(mimes))}",
             )
         return ProbeResult(
             surface="gemini-omni-1.2-flash",
             passed=False,
             latency_s=elapsed,
-            detail=f"No media parts returned (text={_truncate(text, 100)})",
+            detail=f"status={status}, no video outputs (steps={len(getattr(interaction, 'steps', None) or [])})",
         )
     except Exception as exc:
         return ProbeResult(
