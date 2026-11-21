@@ -52,6 +52,7 @@ h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
   <h1>Flood <b>Pull-Back</b></h1>
   <span class="pill" id="datePill">San Francisco · 2026-11-18</span>
   <span class="pill" id="srcPill">forecast: night before</span>
+  <a class="pill" id="modeLink" href="#" style="text-decoration:none;color:var(--text);border-color:var(--blue)">…</a>
   <label class="pill" style="cursor:pointer"><input type="checkbox" id="waymoTog" checked> Waymo activity (CPUC 2026 Q3)</label>
   <div class="seg" id="setSeg"><button data-set="carbon">Gemini 4 Carbon</button><button data-set="baseline">Baseline</button></div>
   <div class="legend">
@@ -216,7 +217,7 @@ function update(full) {
   document.getElementById('sPct').textContent = n ? Math.round(100 * inn / n) + '%' : '–';
   document.getElementById('clock').textContent = fmt(Math.floor(clock));
   const bn = document.getElementById('banner');
-  if (!bn.textContent.includes('saw water')) { bn.textContent = '11:00 AM · Waymo paused all San Francisco service'; bn.style.display = clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none'; }
+  if (!bn.textContent.includes('saw water')) { bn.textContent = '11:00 AM · Waymo paused all San Francisco service'; bn.style.display = DATE === '2026-11-18' && clock >= 11 * 60 && clock < 12 * 60 + 30 ? 'block' : 'none'; }
   styleZones(); drawRain();
 }
 
@@ -335,11 +336,15 @@ addEventListener('resize', drawRain);
 
 (async () => {
   const cells = await j('/data/cells.json'); grid = cells.grid;
-  events = await j(`/data/events_${DATE}.json`);
+  events = await j(`/data/events_${DATE}.json`).catch(() => []);
   fcNight = await j(`/data/forecast_${DATE}.json`);
   fcLatest = await j(`/data/forecast_${DATE}_latest.json`).catch(() => null);
   document.getElementById('datePill').textContent = `San Francisco · ${DATE}`;
   document.getElementById('srcPill').textContent = `zones from ${fcNight.source === 'previous_day1' ? 'night-before' : fcNight.source} forecast · ${fcNight.total_mm} mm`;
+  const live = await j('/data/live.json').catch(() => null);
+  const ml = document.getElementById('modeLink');
+  if (DATE === '2026-11-18') { if (live) { ml.textContent = `▶ LIVE: next storm ${live.date} (${live.total_mm} mm forecast)`; ml.href = `/?date=${live.date}`; } else ml.style.display = 'none'; }
+  else { ml.textContent = '◀ Replay Nov 18 (real floods)'; ml.href = '/'; document.getElementById('srcPill').textContent = `LIVE forecast · ${fcNight.total_mm} mm · zones await approval`; }
   await loadZones(); loadScore();
   // real Waymo data: tracts where Waymo reported collisions in Q3 2026 (its trip locations are redacted)
   const [wg, ws] = await Promise.all([j('/data/waymo_sf.geojson'), j('/data/waymo_stats.json')]).catch(() => [null, null]);

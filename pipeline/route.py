@@ -126,7 +126,7 @@ def _hits(route, cell_zone):
 
 
 def route(body, load_zones):
-    date = body.get("date", "2026-11-18")
+    date = body.get("date") or str(body.get("t", "2026-11-18"))[:10]
     zset = body.get("set", "carbon")
     frm, to, t = body["from"], body["to"], body.get("t", f"{date}T10:00")
     m = int(t[11:13]) * 60 + int(t[14:16])

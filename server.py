@@ -25,10 +25,13 @@ GENIE = {"session": None, "photo": None}  # one live Genie 4 world at a time (co
 
 def pick_photo(date, zone):
     """Real 311 resident photo from inside the zone, else the nearest one to it."""
-    photos = read_json(os.path.join(DATA, f"photos_{date}.json"), [])
+    photos = read_json(os.path.join(DATA, f"photos_{date}.json")) or read_json(os.path.join(DATA, "photos_2026-11-18.json"), [])
     photos = [p for p in photos if os.path.exists(os.path.join(ROOT, p["path"]))]
     if not photos:
         return None
+    # skip photos that make bad Genie seeds (window decal, balcony, screen, gate, indoor garage)
+    bad = ("235 GOUGH", "880 5TH", "500 PIERCE", "1931 EVANS", "340 6TH")
+    photos = [p for p in photos if not p["address"].upper().startswith(bad)] or photos
     inside = [p for p in photos if zone and p["cell"] in set(zone["cells"])]
     if inside:
         return inside[0]
@@ -61,12 +64,11 @@ def load_zones(date, zset):
     z = read_json(zones_path(date, zset))
     if z is None:
         return None
-    ap = read_json(approvals_path(date, zset), {})
+    z["zones"] += read_json(os.path.join(DATA, f"camera_zones_{date}.json"), [])
+    ap = read_json(approvals_path(date, zset), {})  # apply AFTER camera zones so they can be rejected too
     for zone in z["zones"]:
         if zone["id"] in ap:
             zone["status"] = ap[zone["id"]]
-    extra = read_json(os.path.join(DATA, f"camera_zones_{date}.json"), [])
-    z["zones"] += extra
     return z
 
 
