@@ -109,7 +109,9 @@ def clean_reports(rows):
         r, c = cell_of(lat, lon)
         out.append({"t": t, "lat": lat, "lon": lon,
                     "address": (x.get("address") or "").replace(", SAN FRANCISCO, CA", "").split(", US")[0],
-                    "details": x.get("service_details"), "cell": f"r{r}_c{c}"})
+                    "details": x.get("service_details"), "cell": f"r{r}_c{c}",
+                    "where": "property" if "property" in (x.get("service_details") or "").lower()
+                             or "private_lot" in (x.get("service_details") or "").lower() else "street"})
     return out
 
 
@@ -168,6 +170,27 @@ def write(name, obj):
     print(f"wrote {path} ({os.path.getsize(path)//1024} KB)")
 
 
+def street_cells(reports, rain, storm_days):
+    """Car-relevant flood memory: only reports of water ON THE STREET (not basements/property)."""
+    storm_set = set(storm_days)
+    by_cell = defaultdict(list)
+    for r in reports:
+        if r["t"][:10] < DEMO_DATE and r["where"] == "street":
+            by_cell[r["cell"]].append(r)
+    out = []
+    for cid, rs in by_cell.items():
+        r_, c_ = (int(p[1:]) for p in cid.split("_"))
+        lat, lon = cell_center(r_, c_)
+        sdays = sorted({x["t"][:10] for x in rs if x["t"][:10] in storm_set}, reverse=True)
+        r6 = [v for v in (rain_6h(rain, x["t"]) for x in rs) if v > 0]
+        th = percentile(r6, 0.25)
+        out.append({"id": cid, "lat": lat, "lon": lon, "n_reports": len(rs), "n_storm_days": len(sdays),
+                    "storm_days": sdays, "thresh_mm_6h": round(th, 1) if th is not None else None,
+                    "top_addresses": [a for a, _ in Counter(x["address"] for x in rs).most_common(3)]})
+    out.sort(key=lambda c: (-c["n_storm_days"], -c["n_reports"]))
+    return {"grid": GRID, "history_before": DEMO_DATE, "storm_days": storm_days, "street_only": True, "cells": out}
+
+
 # ---------- main ----------
 def main():
     refresh = "--refresh" in sys.argv
@@ -208,9 +231,10 @@ def main():
         })
     cells.sort(key=lambda c: (-c["n_storm_days"], -c["n_reports"]))
     write("cells.json", {"grid": GRID, "history_before": DEMO_DATE, "storm_days": storm_days, "cells": cells})
+    write("cells_street.json", street_cells(reports, rain, storm_days))
 
     print(f"4. events {DEMO_DATE}")
-    ev = sorted(({"t": r["t"], "lat": r["lat"], "lon": r["lon"], "address": r["address"], "cell": r["cell"]}
+    ev = sorted(({"t": r["t"], "lat": r["lat"], "lon": r["lon"], "address": r["address"], "cell": r["cell"], "where": r["where"]}
                  for r in reports if r["t"].startswith(DEMO_DATE)), key=lambda e: e["t"])
     write(f"events_{DEMO_DATE}.json", ev)
     by_hour = Counter(int(e["t"][11:13]) for e in ev)

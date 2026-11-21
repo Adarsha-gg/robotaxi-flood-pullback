@@ -168,28 +168,36 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"ok": True, "updated": len(ids)})
         if u.path == "/api/ride/plan":
             from pipeline import ride
-            p = ride.plan(b.get("from", [37.7715, -122.4545]), b.get("to", [37.7700, -122.3910]),
-                          b.get("t", "2026-11-18T09:00"), b.get("date", "2026-11-18"))
+            p = ride.plan(b.get("from", [37.7800, -122.4650]), b.get("to", [37.7765, -122.3946]),
+                          b.get("t", "2026-11-18T08:58"), b.get("date", "2026-11-18"))
+            RIDE.clear()
             RIDE["plan"] = p
-            return self.send_json(p)
+            return self.send_json({k: v for k, v in p.items() if not k.startswith("_")})
+        if u.path == "/api/ride/check":
+            from pipeline import ride
+            RIDE["check"] = ride.check_auto(RIDE["plan"])
+            return self.send_json(RIDE["check"])
         if u.path == "/api/ride/simulate":
             from pipeline import ride
-            p = RIDE.get("plan")
-            if not p or not p.get("watch"):
-                return self.send_json({"error": "plan a ride first"}, 400)
+            c = RIDE.get("check")
+            if not c or not c.get("watch"):
+                return self.send_json({"error": "no block to simulate"}, 400)
             if GENIE["session"]:
                 GENIE["session"].stop()
             try:
-                return self.send_json(ride.simulate(p["watch"], p["warning"], GENIE))
+                return self.send_json(ride.simulate(c["watch"], c, GENIE))
             except Exception as e:
                 return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/ride/reroute":
             from pipeline import ride
-            p = RIDE.get("plan")
+            p, c = RIDE["plan"], RIDE.get("check") or {"risky_b": []}
             if GENIE["session"]:
                 GENIE["session"].stop()
-            safe = ride.reroute(p, p["decide_index"])
-            return self.send_json({"safe": safe, "proof": ride.proof(p, safe, p["decide_t"])})
+            excl = [r["cell"] for r in p["risky_a"]] + [r["cell"] for r in c["risky_b"]]
+            here, idx = b["here"], int(b.get("index", c.get("at_index", 0)))
+            route_b = ride.reroute(p, here, b["t"], excl)
+            driven = p["route_a"]["coords"][:idx + 1] + route_b["coords"]
+            return self.send_json({"route_b": route_b, "proof": ride.proof(p, driven, p["t"])})
         if u.path == "/api/genie/start":
             from gem.world import GenieSession, DEFAULT_PROMPT
             date, zset = b.get("date", "2026-11-18"), b.get("set", "carbon")

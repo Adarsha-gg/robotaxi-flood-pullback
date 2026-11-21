@@ -1,12 +1,17 @@
-"""The ride: one robotaxi trip A -> B on 2026-11-18, told as a story.
+"""The ride: one robotaxi trip A -> B on 2026-11-18, with two flood decisions and no stops.
 
-plan()      normal route + per-point clock; mid-ride forecast warning (latest model run);
-            flood history of the blocks ahead; the "watch point" to simulate.
-simulate()  Genie 4 renders the watch-point street (seeded with a real 311 photo) under
-            the forecast rain; Decision 1 judges a simulated frame.  (~6-8 s)
-reroute()   route that avoids the risky blocks ahead.
-proof()     the REAL 311 flood reports on the old vs new route after the decision.
+plan()      PRE-TRIP: fastest route; scan it against the forecast available at departure
+            (night-before run) + street-only flood memory; pick the flood-aware route A.
+check()     MID-RIDE: a newer forecast run arrives; scan the rest of route A; return the
+            block to simulate ("watch") if any.
+simulate()  Genie 4 renders that street from a robotaxi's roof camera, seeded with a real
+            311 photo; Decision 1 answers CAR questions (lane covered? depth vs wheel? lane
+            edges hidden?) on simulated frames.
+reroute()   new route from the car's current position, avoiding every risky block.
+proof()     REAL street-flooding 311 reports on the fastest route vs the route driven.
+Car-relevant only: 311 reports filed as flooding "on the street" (not basements/property).
 """
+import base64
 import json
 import math
 import os
@@ -17,7 +22,8 @@ from pipeline import route as R
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
-GRID = R.GRID
+BAD_PHOTOS = ("235 GOUGH", "880 5TH", "500 PIERCE", "1931 EVANS", "340 6TH")
+A_MIN_STORMS, B_MIN_STORMS = 14, 6
 
 
 def _j(name, default=None):
@@ -33,18 +39,16 @@ def _dist_m(a, b):
 
 
 def _timeline(coords, minutes, t0):
-    """Clock time at each route point, spread by distance."""
     d = [0.0]
     for a, b in zip(coords, coords[1:]):
         d.append(d[-1] + _dist_m(a, b))
-    total = d[-1] or 1
     start = datetime.fromisoformat(t0)
-    return [(start + timedelta(minutes=minutes * x / total)).strftime("%Y-%m-%dT%H:%M:%S") for x in d], d
+    return [(start + timedelta(minutes=minutes * x / (d[-1] or 1))).strftime("%Y-%m-%dT%H:%M:%S") for x in d], d
 
 
 def _cells_on(coords):
     seen, out = set(), []
-    for i, (la, lo) in enumerate(R._densify(coords, 30)):
+    for la, lo in R._densify(coords, 30):
         c = R._cell(la, lo)
         if c not in seen:
             seen.add(c)
@@ -52,76 +56,138 @@ def _cells_on(coords):
     return out
 
 
-def _rain_window(fc, t, hours=3):
-    h0 = t[:13] + ":00"
-    hrs = [h for h in fc["hours"] if h["t"] >= h0][:hours]
-    return hrs, (max(hrs, key=lambda h: h["mm"]) if hrs else None)
+def _six(fc, t):
+    hrs = [h for h in fc["hours"] if h["t"] <= t[:13] + ":00"][-6:]
+    return round(sum(h["mm"] for h in hrs), 1)
 
 
-def plan(frm, to, t="2026-11-18T08:40", date="2026-11-18"):
-    cells = {c["id"]: c for c in _j("cells.json")["cells"]}          # history strictly before Nov 18
-    fc_latest = _j(f"forecast_{date}_latest.json") or _j(f"forecast_{date}.json")
-    base = R._valhalla(frm, to, set())
-    times, dist = _timeline(base["coords"], base["min"], t)
+def _route(coords_from, to, excl, t0):
+    r = R._valhalla(coords_from, to, set(excl))
+    times, dist = _timeline(r["coords"], r["min"], t0)
+    return {"coords": r["coords"], "times": times, "min": r["min"], "km": r["km"], "dist": dist}
 
-    # 1) forecast warning: the in-ride model update for the next hours
-    hrs, peak = _rain_window(fc_latest, t, 3)
-    warning = {"source": fc_latest["source"], "next_hours": hrs, "peak": peak,
-               "text": f"{peak['mm']} mm/h expected at {peak['t'][11:16]} over the route" if peak else "no rain"}
 
-    # 2) history of the blocks ahead
-    ahead = []
-    for c, la, lo in _cells_on(base["coords"]):
+def _scan(route, cells, six_mm, min_storms, lo=0.0, hi=1.0, skip=()):
+    """Blocks on the route with street-flood history whose threshold the forecast beats."""
+    n, total, out = len(route["coords"]), route["dist"][-1] or 1, []
+    for c, la, lo_ in _cells_on(route["coords"]):
         h = cells.get(c)
-        if h and h["n_storm_days"] >= 3:
-            ahead.append({"cell": c, "lat": la, "lon": lo, "n_storm_days": h["n_storm_days"],
-                          "storm_days": h["storm_days"][:5], "thresh_mm_6h": h["thresh_mm_6h"],
-                          "name": (h["top_addresses"] or [c])[0].replace("Intersection of ", "")})
-    six_h = sum(x["mm"] for x in [h for h in fc_latest["hours"] if h["t"] <= (peak or {"t": t})["t"]][-6:])
-    # where along the route each block sits (0..1)
-    n = len(base["coords"])
-    for a in ahead:
-        k = min(range(n), key=lambda i: _dist_m(base["coords"][i], (a["lat"], a["lon"])))
-        a["route_index"], a["frac"], a["eta"] = k, round(dist[k] / (dist[-1] or 1), 3), times[k]
-    # risky = strong flood history + forecast rain above the block's threshold, in the 2nd half of the ride
-    risky = [a for a in ahead if a["thresh_mm_6h"] is not None and six_h >= a["thresh_mm_6h"]
-             and a["n_storm_days"] >= 8 and 0.3 <= a["frac"] <= 0.92]
-    risky.sort(key=lambda a: -a["n_storm_days"])
-    risky = risky[:10]
-    watch = dict(risky[0]) if risky else None
-    if watch:
-        watch["photo"] = _nearest_photo(date, watch["lat"], watch["lon"])
-    decide_index = max(1, int(min(a["route_index"] for a in risky) * 0.6)) if risky else 0
+        if not h or c in skip or h["n_storm_days"] < min_storms or h["thresh_mm_6h"] is None or six_mm < h["thresh_mm_6h"]:
+            continue
+        k = min(range(n), key=lambda i: _dist_m(route["coords"][i], (la, lo_)))
+        frac = route["dist"][k] / total
+        if lo <= frac <= hi:
+            out.append({"cell": c, "lat": la, "lon": lo_, "n_storm_days": h["n_storm_days"],
+                        "storm_days": h["storm_days"][:6], "thresh_mm_6h": h["thresh_mm_6h"],
+                        "name": (h["top_addresses"] or [c])[0].replace("Intersection of ", ""),
+                        "route_index": k, "frac": round(frac, 3), "eta": route["times"][k]})
+    out.sort(key=lambda a: -a["n_storm_days"])
+    return out
+
+
+def _strip(r):
+    return {k: v for k, v in r.items() if k != "dist"}
+
+
+def plan(frm, to, t="2026-11-18T08:58", date="2026-11-18"):
+    cells = {c["id"]: c for c in (_j("cells_street.json") or _j("cells.json"))["cells"]}
+    fc_night = _j(f"forecast_{date}.json")
+    fast = _route(frm, to, [], t)
+    six_a = _six(fc_night, "2026-11-18T08:00")
+    risky_a = _scan(fast, cells, six_a, A_MIN_STORMS, 0.12, 0.9)[:4]
+    route_a = _route(frm, to, [r["cell"] for r in risky_a], t) if risky_a else fast
     return {"from": frm, "to": to, "t": t, "date": date,
-            "route": {"coords": base["coords"], "times": times, "min": base["min"], "km": base["km"]},
-            "warning": warning, "forecast_6h_mm": round(six_h, 1),
-            "ahead": ahead, "risky": [r["cell"] for r in risky], "risky_detail": risky, "watch": watch,
-            "decide_index": decide_index, "decide_t": times[decide_index]}
+            "fast": _strip(fast), "route_a": _strip(route_a), "risky_a": risky_a,
+            "pre_trip": {"forecast_source": fc_night["source"], "six_h_mm": six_a,
+                         "day_total_mm": fc_night["total_mm"],
+                         "hours": [h for h in fc_night["hours"] if "06:00" <= h["t"][11:16] <= "12:00"]},
+            "_route_a_dist": route_a["dist"]}
 
 
-def _nearest_photo(date, lat, lon):
+def check(p, at_index, min_frac=0.0):
+    """Mid-ride: newer forecast run; scan the rest of route A."""
+    cells = {c["id"]: c for c in (_j("cells_street.json") or _j("cells.json"))["cells"]}
+    fc_latest = _j(f"forecast_{p['date']}_latest.json") or _j(f"forecast_{p['date']}.json")
+    t_now = p["route_a"]["times"][at_index]
+    hrs = [h for h in fc_latest["hours"] if h["t"] >= t_now[:13] + ":00"][:3]
+    peak = max(hrs, key=lambda h: h["mm"]) if hrs else None
+    six_b = _six(fc_latest, (peak or {"t": t_now})["t"])
+    ra = {**p["route_a"], "dist": p["_route_a_dist"]}
+    frac_now = ra["dist"][at_index] / (ra["dist"][-1] or 1)
+    risky_b = _scan(ra, cells, six_b, B_MIN_STORMS, max(min_frac, frac_now + 0.15), 0.92,
+                    skip={r["cell"] for r in p["risky_a"]})[:4]
+    # simulate the strongest block that has a real street-level photo close by
+    for r in risky_b:
+        r["photo"] = _car_photo(p["date"], r["lat"], r["lon"])
+    near = [r for r in risky_b if r["photo"] and r["photo"]["dist_m"] <= 900]
+    watch = dict((near or risky_b)[0]) if risky_b else None
+    return {"t": t_now, "at_index": at_index, "forecast_source": fc_latest["source"], "next_hours": hrs,
+            "peak": peak, "six_h_mm": six_b, "risky_b": risky_b, "watch": watch}
+
+
+def _car_photo(date, lat, lon):
+    """Nearest real 311 photo that shows the ROADWAY (prefer ones with cars in the water)."""
     photos = _j(f"photos_{date}.json") or _j("photos_2026-11-18.json", [])
-    bad = ("235 GOUGH", "880 5TH", "500 PIERCE", "1931 EVANS", "340 6TH")
-    photos = [p for p in photos if not p["address"].upper().startswith(bad)
+    photos = [p for p in photos if not p["address"].upper().startswith(BAD_PHOTOS)
               and os.path.exists(os.path.join(ROOT, p["path"]))]
-    if not photos:
+    road = [p for p in photos if (p.get("road_view") or 0) >= 0.6] or photos  # car's-eye photos only
+    if not road:
         return None
-    p = min(photos, key=lambda p: _dist_m((p["lat"], p["lon"]), (lat, lon)))
+    # nearest road-view photo; a car in the water nearby is a strong tiebreaker
+    p = min(road, key=lambda p: _dist_m((p["lat"], p["lon"]), (lat, lon)) - 300 * (p.get("cars_in_water") or 0))
     return {**p, "dist_m": round(_dist_m((p["lat"], p["lon"]), (lat, lon)))}
 
 
-def simulate(watch, warning, session_holder, settle_s=1.2, max_wait=25):
-    """Genie 4 world of the watch point under the forecast rain; Decision 1 on a simulated frame."""
+CAR_QUESTIONS = {
+    "lane_covered": {"type": "noul", "instructions":
+        "Is standing or running water covering the vehicle TRAVEL LANE of the road (not just the sidewalk, gutter or curb)?"},
+    "car_depth": {"type": "score", "instructions": "How deep is the water a car driving in this lane would have to go through?",
+                  "criteria": ["dry or damp road", "wet road, thin film of water", "puddles in the lane, below the tire tread",
+                               "water over the tire sidewall, below the wheel hub",
+                               "water at or above the wheel hub, stall risk for a car"]},
+    "edges_hidden": {"type": "noul", "instructions":
+        "Does the water hide the lane markings or the curb line, so a self-driving car could not tell where the road edge is?"},
+}
+
+
+_CLIENT = None
+
+
+def judge_car(jpeg):
+    """Decision 1 with CAR questions (not 'is it wet for a person')."""
+    global _CLIENT
+    if _CLIENT is None:
+        from gem.client import get_beta_client
+        _CLIENT = get_beta_client()
+    t0 = time.time()
+    res = _CLIENT.decisions.create(
+        model="models/gemini-decision-1",
+        input=[{"type": "image", "data": base64.b64encode(jpeg).decode(), "mime_type": "image/jpeg"}],
+        questions=CAR_QUESTIONS)
+    a = res.answers
+    lane, hidden = a["lane_covered"].noul, a["edges_hidden"].noul
+    probs = {int(k): v for k, v in a["car_depth"].probabilities.items()}
+    level = max(probs, key=probs.get)
+    p_tire_or_worse = sum(v for k, v in probs.items() if k >= 3)
+    action = "avoid" if (lane >= 0.6 and p_tire_or_worse >= 0.5) or (hidden >= 0.6 and lane >= 0.6) else (
+        "slow" if lane >= 0.5 else "proceed")
+    return {"lane_covered": round(lane, 3), "edges_hidden": round(hidden, 3),
+            "depth_level": level, "depth_label": CAR_QUESTIONS["car_depth"]["criteria"][level],
+            "p_tire_or_worse": round(p_tire_or_worse, 3), "action": action, "latency_ms": int((time.time() - t0) * 1000)}
+
+
+def simulate(watch, chk, session_holder, settle_s=1.2, max_wait=25):
+    """Genie 4 from the robotaxi roof camera at the watch block; Decision 1 car rubric on a simulated frame."""
     from gem.world import GenieSession
-    from gem.vision import judge_frame
     photo = watch["photo"]
     with open(os.path.join(ROOT, photo["path"]), "rb") as f:
         img = f.read()
-    peak = warning.get("peak") or {"mm": 0, "t": ""}
-    prompt = (f"Street-level view from a driverless robotaxi approaching {watch['name']}, San Francisco, at "
-              f"{peak['t'][11:16]} on 2026-11-18. Forecast: {peak['mm']} mm of rain in one hour on already "
-              f"saturated streets; this spot flooded on {watch['n_storm_days']} past storms. Show how deep the "
-              f"runoff gets on the roadway as the car drives forward slowly. Keep the real street from the photo.")
+    peak = chk.get("peak") or {"mm": 0, "t": ""}
+    prompt = (f"Forward-facing roof camera of a driverless robotaxi in the travel lane, approaching {watch['name']}, "
+              f"San Francisco, at {peak['t'][11:16]} on 2026-11-18. {peak['mm']} mm of rain in one hour on saturated "
+              f"streets; this intersection's roadway flooded in {watch['n_storm_days']} past storms. Show the water "
+              f"across the driving lane and how high it reaches on the wheels of cars ahead. The robotaxi drives "
+              f"forward slowly in its lane. Keep the real street layout from the reference photo.")
     t0 = time.time()
     s = GenieSession(img, prompt, max_seconds=30).start()
     session_holder["session"], session_holder["photo"] = s, {**photo, "zone": watch["name"]}
@@ -132,8 +198,7 @@ def simulate(watch, warning, session_holder, settle_s=1.2, max_wait=25):
     while time.time() - t1 < settle_s and s.status == "live":
         time.sleep(0.1)
     frame = s.frame
-    t_frame = time.time() - t0
-    verdict = judge_frame(frame) if frame else {"flooded_p": None, "depth_label": "unknown"}
+    verdict = judge_car(frame) if frame else {"action": "unknown"}
     path = os.path.join(ROOT, "media", "renders", f"sim_{watch['cell']}_{int(time.time())}.jpg")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if frame:
@@ -144,40 +209,39 @@ def simulate(watch, warning, session_holder, settle_s=1.2, max_wait=25):
             "total_s": round(time.time() - t0, 1), "frames_seen": s.frame_no}
 
 
-def reroute(p, from_index=0):
-    """Safe route from the car's current position, avoiding the risky blocks."""
-    coords = p["route"]["coords"]
-    here = coords[min(from_index, len(coords) - 1)]
-    excl = set(p["risky"])
-    safe = None
-    for keep in (len(excl), 6, 3, 1):  # fewer exclusions if the router refuses
+def reroute(p, here, t_now, excl):
+    for keep in (len(excl), 4, 2):
         try:
-            ex = set(sorted(excl, key=lambda c: -next(r["n_storm_days"] for r in p["risky_detail"] if r["cell"] == c))[:keep])
-            safe = R._valhalla(here, p["to"], ex)
-            break
+            r = _route(here, p["to"], list(excl)[:keep], t_now)
+            return _strip(r)
         except Exception:
             continue
-    if safe is None:
-        raise RuntimeError("router refused every exclusion set")
-    rest = coords[from_index:]
-    # time for the remaining normal route vs the new route
-    rest_min = p["route"]["min"] * (len(rest) / max(1, len(coords)))
-    t_here = p["route"]["times"][min(from_index, len(coords) - 1)]
-    times, _ = _timeline(safe["coords"], safe["min"], t_here)
-    crossed = {R._cell(la, lo) for la, lo in R._densify(safe["coords"], 30)} & excl
-    return {"coords": safe["coords"], "times": times, "min": safe["min"], "km": safe["km"],
-            "added_min": round(safe["min"] - rest_min, 1), "risky_crossed": len(crossed)}
+    raise RuntimeError("router refused every exclusion set")
 
 
-def proof(p, safe, after_t, hours=3):
-    """Real 311 flood reports on the old route vs the new route, after the decision."""
-    ev = _j(f"events_{p['date']}.json", [])
+def proof(p, driven_coords, after_t, hours=3):
+    """REAL street-flooding reports on the fastest route vs the route actually driven."""
+    ev = [e for e in _j(f"events_{p['date']}.json", []) if e.get("where", "street") == "street"]
     end = (datetime.fromisoformat(after_t) + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%S")
-    old_cells = {c for c, _, _ in _cells_on(p["route"]["coords"][p.get("decide_index", 0):])}
-    new_cells = {c for c, _, _ in _cells_on(safe["coords"])}
+    fast_cells = {c for c, _, _ in _cells_on(p["fast"]["coords"])}
+    drove_cells = {c for c, _, _ in _cells_on(driven_coords)}
 
     def pick(cs):
         return [e for e in ev if e["cell"] in cs and after_t <= e["t"] <= end]
-    old, new = pick(old_cells), pick(new_cells)
-    return {"window": [after_t, end], "old_route": old, "new_route": new,
-            "old_n": len(old), "new_n": len(new)}
+    old, new = pick(fast_cells), pick(drove_cells)
+    return {"window": [after_t, end], "old_route": old, "new_route": new, "old_n": len(old), "new_n": len(new)}
+
+
+def check_auto(p, lead_min=3.5):
+    """Pick the mid-ride moment: the newer forecast lands ~lead_min ride-minutes before the block to simulate."""
+    first = check(p, 1, min_frac=0.5)
+    w = first["watch"]
+    if not w:
+        return first
+    times = p["route_a"]["times"]
+    target = datetime.fromisoformat(w["eta"]) - timedelta(minutes=lead_min)
+    idx = max(1, max((i for i, t in enumerate(times) if datetime.fromisoformat(t) <= target), default=1))
+    out = check(p, idx, min_frac=0.5)
+    if not out["watch"] or out["watch"]["cell"] != w["cell"]:
+        out = {**first, "at_index": idx, "t": times[idx]}
+    return out
