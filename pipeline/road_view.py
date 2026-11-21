@@ -26,10 +26,8 @@ _CLIENT = None
 
 
 def score(p):
-    global _CLIENT
-    if _CLIENT is None:
-        from gem.client import get_beta_client
-        _CLIENT = get_beta_client()
+    from gem.client import shared_beta_client
+    _CLIENT = shared_beta_client()
     with open(os.path.join(ROOT, p["path"]), "rb") as f:
         img = f.read()
     try:

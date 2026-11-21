@@ -57,6 +57,10 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
 .bar{display:grid;grid-template-columns:150px 1fr 44px;gap:8px;align-items:center;font-size:12px;color:var(--muted)}
 .bar .t{height:8px;border-radius:5px;background:#000;border:1px solid var(--line);overflow:hidden}.bar .t div{height:100%;width:0;background:var(--red);transition:width .6s}
 .bar b{font:700 12px "JetBrains Mono",monospace;color:var(--text);text-align:right}
+.camgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.cam img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block;background:#000}
+.cam .cap{display:flex;justify-content:space-between;gap:4px}
+.live{color:var(--red);font-weight:700}
 .foot{padding:10px 16px;border-top:1px solid var(--line);color:var(--dim);font-size:11px}
 @media (max-width:1000px){.app{grid-template-columns:1fr;grid-template-rows:55vh 45vh}}
 </style>
@@ -66,9 +70,10 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
   <div style="position:relative">
     <div id="map"></div>
     <div class="top">
-      <div class="chip"><div class="brand">Flood <b>Pull-Back</b></div><div class="sub">San Francisco · Wed Nov 18, 2026 · real data replay</div></div>
+      <div class="chip"><div class="brand">Flood <b>Pull-Back</b></div><div class="sub" id="modeSub">San Francisco · Wed Nov 18, 2026 · real data replay</div>
+        <div style="margin-top:6px;display:flex;gap:6px"><a href="/ride" id="mReplay" class="tag" style="text-decoration:none">Replay Nov 18</a><a href="/ride?mode=live" id="mLive" class="tag" style="text-decoration:none">● Live tonight</a></div></div>
       <div class="chip"><div class="clock" id="clock">08:58</div><div class="sub">ride clock</div></div>
-      <div class="chip"><div class="ab"><span class="dotA"></span>Inner Richmond → <span class="dotB"></span>Caltrain, 4th &amp; King</div>
+      <div class="chip"><div class="ab"><span class="dotA"></span><span id="tripName">Inner Richmond → </span><span class="dotB"></span><span id="tripTo">Caltrain, 4th &amp; King</span></div>
         <div class="sub">Robotaxi W-112 · 1 rider · <span id="status">waiting</span></div></div>
     </div>
     <div class="alert" id="alert"></div>
@@ -84,7 +89,7 @@ aside{background:var(--panel);border-left:1px solid var(--line);display:flex;fle
       <div class="step" id="s1"><div class="k">01 · Route check before pickup <span class="tag" id="s1t">night-before forecast</span></div>
         <div class="h" id="s1h">–</div><div class="p" id="s1p"></div><ul class="list" id="s1l"></ul></div>
       <div class="step" id="s2"><div class="k">02 · Forecast update, mid-ride <span class="tag amber">newer model run</span></div>
-        <div class="h" id="s2h">–</div><div class="p" id="s2p"></div><div class="rain" id="rain"></div></div>
+        <div class="h" id="s2h">–</div><div class="p" id="s2p"></div><div class="rain" id="rain"></div><div class="camgrid" id="camgrid"></div></div>
       <div class="step" id="s3"><div class="k">03 · Street-flood memory ahead <span class="tag">car-relevant reports only</span></div>
         <div class="h" id="s3h">–</div><div class="p" id="s3p"></div></div>
       <div class="step" id="s4"><div class="k">04 · Simulate from the robotaxi's camera <span class="tag">Genie 4 → Decision 1</span></div>
@@ -283,6 +288,79 @@ async function start() {
   $('go').disabled = false; $('go').textContent = '▶ Replay';
 }
 
+// ================= LIVE MODE: tonight's ride, live Caltrans cameras, Genie sim at ETA =================
+const LIVE = new URLSearchParams(location.search).get('mode') === 'live';
+const LFROM = [37.7502, -122.4337], LTO = [37.7840, -122.4010];
+async function startLive() {
+  running = true; $('go').disabled = true;
+  grid = grid || (await (await fetch('/data/cells.json')).json()).grid;
+  on('s1'); status('checking tonight\'s route…');
+  $('s1h').textContent = 'Checking the route against the LIVE forecast…';
+  const P = await post('/api/live/plan', {from: LFROM, to: LTO});
+  setClock(toMin(P.t)); $('modeSub').textContent = `San Francisco · today · live forecast + live cameras · now ${P.now.slice(11, 16)}`;
+  const fast = P.fast, A = P.route_a;
+  const fl = L.polyline(fast.coords, {color: '#fff', weight: 5, opacity: .9}).addTo(lay.route);
+  map.fitBounds(fl.getBounds(), {padding: [110, 110]});
+  carM = L.marker(fast.coords[0], {icon: carIcon(), zIndexOffset: 1000}).addTo(lay.car);
+  L.circleMarker(fast.coords.at(-1), {radius: 7, color: '#fff', fillColor: '#fff', fillOpacity: 1}).addTo(lay.route);
+  for (const r of P.risky) { block(r); await sleep(300); }
+  const pk = P.forecast.find(h => h.t.slice(0, 13) === P.t.slice(0, 13)) || {mm: 0};
+  $('s1t').textContent = 'live forecast · no freeways';
+  $('s1h').textContent = P.risky.length ? `Ride at ${hm(P.t)}: fastest street route crosses ${P.risky.length} street-flood blocks` : `Ride at ${hm(P.t)}: no flood-prone blocks under tonight's rain`;
+  $('s1p').textContent = `Live Open-Meteo forecast: ${pk.mm} mm at ${hm(P.t)}, ${P.six_h_mm} mm in the 6 hours before. Surface streets only (robotaxis are off CA freeways since Nov 17).`;
+  $('s1l').innerHTML = P.risky.map(r => `<li><span>${esc(title(r.name))}</span><span class="tag amber">${r.n_storm_days} past floods</span></li>`).join('');
+  if (P.risky.length) {
+    await sleep(1000); lay.route.clearLayers();
+    L.polyline(fast.coords, {color: '#ff4d5e', weight: 4, opacity: .8, dashArray: '8 8'}).addTo(lay.route);
+    await drawLine(A.coords, {color: '#2fd18b', weight: 6, opacity: .95}, 1200);
+    const dA = A.min - fast.min; $('s1t').className = 'tag green'; $('s1t').textContent = `${dA >= 0 ? '+' : ''}${dA.toFixed(1)} min`;
+  }
+  // cameras on the route
+  on('s2'); $('s2').querySelector('.k').firstChild.textContent = '02 · Live cameras on the route ';
+  $('s2h').textContent = `Pulling ${Math.min(6, P.cams.length)} live Caltrans cameras near the route…`;
+  $('rain').innerHTML = P.forecast.filter(h => h.t.slice(11, 13) >= '15').slice(0, 8).map(h => `<div style="height:${Math.max(4, h.mm / Math.max(...P.forecast.map(x => x.mm), 1) * 100)}%"><span>${hm(h.t)}</span></div>`).join('');
+  for (const c of P.cams.slice(0, 6)) L.marker([c.lat, c.lon], {icon: L.divIcon({className: '', html: '<div class="lbl" style="border-color:#4da3ff;color:#d7eaff">◉ ' + esc(c.id) + '</div>'})}).addTo(lay.fx);
+  const cams = await post('/api/live/cams').catch(() => null);
+  if (!Array.isArray(cams)) { $('s2h').textContent = 'Camera check failed, retry with Re-check now'; $('go').disabled = false; return; }
+  $('s2h').textContent = `${cams.filter(c => c.available).length} of ${cams.length} cameras online right now`;
+  $('s2p').textContent = 'Caltrans District 4, refreshed about every 5 minutes. These watch highway ramps next to the streets the car uses.';
+  $('camgrid').innerHTML = cams.map(c => `<div class="cam"><img src="/${c.frame}"><div class="cap"><span>${esc(c.name.split(' -- ')[1] || c.name)}</span>
+    <span>${c.available ? `<span class="live">LIVE</span> ${esc(c.verdict.depth_label)}` : 'offline'}</span></div></div>`).join('');
+  await sleep(1500);
+  // pick the online camera closest to a flagged block (or the first online one)
+  const online = cams.filter(c => c.available);
+  if (!online.length) { $('s3h').textContent = 'No cameras online near the route'; on('s3'); $('go').disabled = false; return; }
+  const near = b => Math.min(...(P.risky.length ? P.risky : [{lat: b.lat, lon: b.lon}]).map(r => Math.hypot((r.lat - b.lat) * 111000, (r.lon - b.lon) * 88000)));
+  const cam = online.slice().sort((a, b) => near(a) - near(b))[0];
+  on('s3'); $('s3').querySelector('.k').firstChild.textContent = '03 · Right now at the camera ';
+  $('s3h').textContent = `${cam.name.split(' -- ')[1]} at ${cam.fetched_at.slice(11, 16)}: ${cam.verdict.depth_label} → ${cam.verdict.action}`;
+  $('s3p').textContent = `Decision 1 on the live frame: water across lanes ${Math.round(cam.verdict.lane_covered * 100)}%, lane edges hidden ${Math.round(cam.verdict.edges_hidden * 100)}%. The car passes here around ${hm(cam.eta)}.`;
+  map.flyTo([cam.lat, cam.lon], 15, {duration: 1});
+  // simulate that camera at the ETA
+  on('s4'); $('s4').querySelector('.k').firstChild.textContent = '04 · Simulate this camera at your arrival time ';
+  const mmEta = (P.forecast.find(h => h.t.slice(0, 13) === cam.eta.slice(0, 13)) || {mm: 0}).mm;
+  $('s4h').textContent = `Genie 4: this view at ${hm(cam.eta)} with ${mmEta} mm/h…`;
+  $('s4p').textContent = 'Seeded with the live camera frame you just saw, then played forward to the forecast at your arrival time.';
+  $('realImg').src = '/' + cam.frame; $('realCap').textContent = `LIVE · ${cam.name.split(' -- ')[1]} · ${cam.fetched_at.slice(11, 16)}`;
+  const simP = post('/api/live/simulate', {cam: cam.cam});
+  await sleep(1500); $('simImg').src = '/api/genie/stream?ts=' + Date.now();
+  const sim = await simP;
+  if (sim.error) { $('s4p').textContent = sim.error; $('go').disabled = false; return; }
+  const v = sim.verdict, set = (b, val) => { $(b[0]).style.width = Math.round(val * 100) + '%'; $(b[1]).textContent = Math.round(val * 100) + '%'; };
+  set(['bLane', 'vLane'], v.lane_covered); set(['bDepth', 'vDepth'], v.p_tire_or_worse); set(['bHid', 'vHid'], v.edges_hidden);
+  const col = v.action === 'avoid' ? 'var(--red)' : v.action === 'slow' ? 'var(--amber)' : 'var(--green)';
+  $('s4h').innerHTML = `At ${hm(cam.eta)}: <span style="color:${col}">${v.action.toUpperCase()}</span> · ${esc(v.depth_label)}`;
+  $('s4p').textContent += ` Check took ${sim.total_s} s.`; $('simCap').textContent = `Genie 4 · simulated ${hm(cam.eta)} · from the live frame`;
+  setTimeout(() => { if (sim.frame) $('simImg').src = '/' + sim.frame; }, 2500);
+  // decision
+  on('s5'); $('s5').querySelector('.k').firstChild.textContent = '05 · Plan for tonight ';
+  $('s5t').className = 'tag ' + (v.action === 'avoid' ? 'red' : 'green'); $('s5t').textContent = v.action;
+  $('s5h').textContent = v.action === 'avoid' ? `Close the streets near ${cam.name.split(' -- ')[1]} for the ${hm(cam.eta)} ride` : `Keep the flood-aware route for ${hm(P.t)}`;
+  $('s5p').textContent = `${P.risky.length ? 'The route already avoids ' + P.risky.length + ' flood-prone blocks. ' : ''}Cameras re-checked every 5 minutes until departure; the decision updates if the live frame changes.`;
+  $('s6').style.display = 'none'; status('plan ready', 'go');
+  $('go').disabled = false; $('go').textContent = '▶ Re-check now';
+}
+
 function reset() {
   running = false; Object.values(lay).forEach(l => l.clearLayers());
   document.querySelectorAll('.step').forEach(s => s.classList.remove('on', 'now'));
@@ -291,7 +369,9 @@ function reset() {
   $('go').disabled = false; $('go').textContent = '▶ Start ride';
   post('/api/genie/stop');
 }
-$('go').onclick = () => { reset(); setTimeout(start, 50); };
+$('go').onclick = () => { reset(); setTimeout(LIVE ? startLive : start, 50); };
+if (LIVE) { $('tripName').textContent = 'Noe Valley → '; $('tripTo').textContent = 'Moscone Center'; $('mLive').className = 'tag red'; $('modeSub').textContent = 'San Francisco · today · live forecast + live cameras'; $('go').textContent = '▶ Plan tonight\'s ride'; }
+else { $('mReplay').className = 'tag green'; }
 $('reset').onclick = reset;
 </script>
 </body>

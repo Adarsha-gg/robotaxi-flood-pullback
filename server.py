@@ -21,7 +21,8 @@ DATA = os.path.join(ROOT, "data")
 PORT = int(os.environ.get("PORT", 8000))
 LOCK = threading.Lock()
 GENIE = {"session": None, "photo": None}
-RIDE = {}  # one live Genie 4 world at a time (cost cap)
+RIDE = {}
+LIVE = {}  # one live Genie 4 world at a time (cost cap)
 
 
 def pick_photo(date, zone):
@@ -198,6 +199,32 @@ class Handler(SimpleHTTPRequestHandler):
             route_b = ride.reroute(p, here, b["t"], excl)
             driven = p["route_a"]["coords"][:idx + 1] + route_b["coords"]
             return self.send_json({"route_b": route_b, "proof": ride.proof(p, driven, p["t"])})
+        if u.path == "/api/live/plan":
+            from pipeline import live_ride as LR
+            p = LR.plan_live(b.get("from", [37.7502, -122.4337]), b.get("to", [37.7840, -122.4010]), b.get("t"))
+            LIVE.clear()
+            LIVE["plan"] = p
+            return self.send_json(p)
+        if u.path == "/api/live/cams":
+            from concurrent.futures import ThreadPoolExecutor
+            from pipeline import live_ride as LR
+            cams = LIVE["plan"]["cams"][:6]
+            with ThreadPoolExecutor(6) as ex:
+                res = list(ex.map(lambda c: (lambda: LR.camera_now(c))() if True else None, cams))
+            LIVE["cams"] = res
+            return self.send_json(res)
+        if u.path == "/api/live/simulate":
+            from pipeline import live_ride as LR
+            p = LIVE["plan"]
+            cam = next(c for c in LIVE["cams"] if c["cam"] == b["cam"])
+            meta = next(c for c in p["cams"] if c["id"] == b["cam"])
+            mm = next((h["mm"] for h in p["forecast"] if h["t"][:13] == cam["eta"][:13]), 0)
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            try:
+                return self.send_json(LR.simulate_cam(meta, cam["frame"], cam["eta"], mm, p["six_h_mm"], GENIE))
+            except Exception as e:
+                return self.send_json({"error": f"{type(e).__name__}: {str(e)[:300]}"}, 500)
         if u.path == "/api/genie/start":
             from gem.world import GenieSession, DEFAULT_PROMPT
             date, zset = b.get("date", "2026-11-18"), b.get("set", "carbon")

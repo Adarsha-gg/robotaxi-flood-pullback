@@ -25,3 +25,17 @@ def get_client() -> genai.Client:
 def get_beta_client() -> genai.Client:
     ensure_env()
     return genai.Client(http_options={"api_version": "v1beta"})
+
+
+import threading as _threading
+_SHARED = None
+_SHARED_LOCK = _threading.Lock()
+
+
+def shared_beta_client() -> genai.Client:
+    """One process-wide v1beta client (safe across threads; never garbage-collected mid-request)."""
+    global _SHARED
+    with _SHARED_LOCK:
+        if _SHARED is None:
+            _SHARED = get_beta_client()
+        return _SHARED

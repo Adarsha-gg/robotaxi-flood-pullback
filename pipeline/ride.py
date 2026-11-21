@@ -61,8 +61,8 @@ def _six(fc, t):
     return round(sum(h["mm"] for h in hrs), 1)
 
 
-def _route(coords_from, to, excl, t0):
-    r = R._valhalla(coords_from, to, set(excl))
+def _route(coords_from, to, excl, t0, no_freeways=False):
+    r = R._valhalla(coords_from, to, set(excl), no_freeways=no_freeways)
     times, dist = _timeline(r["coords"], r["min"], t0)
     return {"coords": r["coords"], "times": times, "min": r["min"], "km": r["km"], "dist": dist}
 
@@ -155,10 +155,8 @@ _CLIENT = None
 
 def judge_car(jpeg):
     """Decision 1 with CAR questions (not 'is it wet for a person')."""
-    global _CLIENT
-    if _CLIENT is None:
-        from gem.client import get_beta_client
-        _CLIENT = get_beta_client()
+    from gem.client import shared_beta_client
+    _CLIENT = shared_beta_client()
     t0 = time.time()
     res = _CLIENT.decisions.create(
         model="models/gemini-decision-1",

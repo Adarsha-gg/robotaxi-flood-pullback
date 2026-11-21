@@ -170,12 +170,12 @@ def write(name, obj):
     print(f"wrote {path} ({os.path.getsize(path)//1024} KB)")
 
 
-def street_cells(reports, rain, storm_days):
+def street_cells(reports, rain, storm_days, cutoff=DEMO_DATE):
     """Car-relevant flood memory: only reports of water ON THE STREET (not basements/property)."""
     storm_set = set(storm_days)
     by_cell = defaultdict(list)
     for r in reports:
-        if r["t"][:10] < DEMO_DATE and r["where"] == "street":
+        if r["t"][:10] < cutoff and r["where"] == "street":
             by_cell[r["cell"]].append(r)
     out = []
     for cid, rs in by_cell.items():
@@ -188,7 +188,7 @@ def street_cells(reports, rain, storm_days):
                     "storm_days": sdays, "thresh_mm_6h": round(th, 1) if th is not None else None,
                     "top_addresses": [a for a, _ in Counter(x["address"] for x in rs).most_common(3)]})
     out.sort(key=lambda c: (-c["n_storm_days"], -c["n_reports"]))
-    return {"grid": GRID, "history_before": DEMO_DATE, "storm_days": storm_days, "street_only": True, "cells": out}
+    return {"grid": GRID, "history_before": cutoff, "storm_days": storm_days, "street_only": True, "cells": out}
 
 
 # ---------- main ----------

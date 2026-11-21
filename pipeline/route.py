@@ -101,9 +101,11 @@ def _rects(cells, pad=0.00015):
     return polys
 
 
-def _valhalla(frm, to, exclude_cells):
+def _valhalla(frm, to, exclude_cells, no_freeways=False):
     body = {"locations": [{"lat": frm[0], "lon": frm[1]}, {"lat": to[0], "lon": to[1]}],
             "costing": "auto", "units": "kilometers"}
+    if no_freeways:  # robotaxis are off California freeways since 2026-11-17 (DMV)
+        body["costing_options"] = {"auto": {"use_highways": 0.0}}
     if exclude_cells:
         body["exclude_polygons"] = _rects(exclude_cells)
     t = _post(VALHALLA, body)["trip"]
