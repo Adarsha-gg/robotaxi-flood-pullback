@@ -20,6 +20,25 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(ROOT, "data")
 PORT = int(os.environ.get("PORT", 8000))
 LOCK = threading.Lock()
+GENIE = {"session": None, "photo": None}  # one live Genie 4 world at a time (cost cap)
+
+
+def pick_photo(date, zone):
+    """Real 311 resident photo from inside the zone, else the nearest one to it."""
+    photos = read_json(os.path.join(DATA, f"photos_{date}.json"), [])
+    photos = [p for p in photos if os.path.exists(os.path.join(ROOT, p["path"]))]
+    if not photos:
+        return None
+    inside = [p for p in photos if zone and p["cell"] in set(zone["cells"])]
+    if inside:
+        return inside[0]
+    if not zone:
+        return photos[0]
+    g = read_json(os.path.join(DATA, "cells.json"))["grid"]
+    rc = [tuple(int(x[1:]) for x in c.split("_")) for c in zone["cells"]]
+    lat = g["lat0"] + (sum(r for r, _ in rc) / len(rc) + 0.5) * g["dlat"]
+    lon = g["lon0"] + (sum(c for _, c in rc) / len(rc) + 0.5) * g["dlon"]
+    return min(photos, key=lambda p: (p["lat"] - lat) ** 2 + ((p["lon"] - lon) * 0.79) ** 2)
 
 
 def read_json(path, default=None):
@@ -87,6 +106,28 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "no zones"}, 404)
             z["set"] = zset
             return self.send_json(z)
+        if u.path == "/api/genie/status":
+            s = GENIE["session"]
+            return self.send_json({"photo": GENIE["photo"], **(s.info() if s else {"status": "idle"})})
+        if u.path == "/api/genie/stream":
+            s = GENIE["session"]
+            if not s:
+                return self.send_error(404)
+            self.send_response(200)
+            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            last = -1
+            try:
+                while GENIE["session"] is s and s.status not in ("stopped", "error"):
+                    frame, last = s.wait_frame(last)
+                    if frame is None:
+                        continue
+                    self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
+                                     + str(len(frame)).encode() + b"\r\n\r\n" + frame + b"\r\n")
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            return
         if u.path == "/api/score":
             from pipeline.score import score
             return self.send_json(score(q.get("date", "2026-11-18"), q.get("set", "carbon")))
@@ -113,6 +154,48 @@ class Handler(SimpleHTTPRequestHandler):
                 with open(path, "w") as f:
                     json.dump(ap, f)
             return self.send_json({"ok": True, "updated": len(ids)})
+        if u.path == "/api/genie/start":
+            from gem.world import GenieSession, DEFAULT_PROMPT
+            date, zset = b.get("date", "2026-11-18"), b.get("set", "carbon")
+            zone = None
+            if b.get("zone_id"):
+                zf = load_zones(date, zset) or load_zones(date, "baseline") or {"zones": []}
+                zone = next((z for z in zf["zones"] if z["id"] == b["zone_id"]), None)
+            photo = pick_photo(date, zone)
+            if not photo:
+                return self.send_json({"error": "no 311 photos; run python -m pipeline.fetch_photos"}, 404)
+            if GENIE["session"]:
+                GENIE["session"].stop()
+            place = zone["name"] if zone else photo["address"]
+            prompt = (f"Street-level view from a driverless robotaxi at {photo['address']}, San Francisco, during the "
+                      f"2026-11-18 storm (photo taken {photo['t'][11:16]}). Heavy rain, runoff flooding the roadway and "
+                      f"rising toward the curb. Keep the real street from the reference photo. The car drives slowly.")
+            with open(os.path.join(ROOT, photo["path"]), "rb") as f:
+                GENIE["session"] = GenieSession(f.read(), prompt, max_seconds=float(b.get("max_seconds", 60))).start()
+            GENIE["photo"] = {**photo, "zone": place}
+            return self.send_json({"ok": True, "photo": GENIE["photo"]})
+        if u.path == "/api/genie/key":
+            s = GENIE["session"]
+            if not s:
+                return self.send_json({"error": "no session"}, 404)
+            try:
+                s.send_key(b.get("action"), b.get("key"))
+            except ValueError as e:
+                return self.send_json({"error": str(e)}, 400)
+            return self.send_json({"ok": True})
+        if u.path == "/api/genie/stop":
+            s = GENIE["session"]
+            if not s:
+                return self.send_json({"ok": True})
+            s.stop()
+            out = {"ok": True, **s.info()}
+            if b.get("save") and s.frames:
+                import time as _t
+                path = os.path.join(ROOT, "media", "renders", f"genie_live_{int(_t.time())}.mp4")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                s.save_mp4(path)
+                out["path"] = os.path.relpath(path, ROOT)
+            return self.send_json(out)
         if u.path == "/api/route":
             from pipeline.route import route
             return self.send_json(route(b, load_zones))

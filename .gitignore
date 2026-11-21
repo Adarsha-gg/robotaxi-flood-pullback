@@ -11,3 +11,10 @@ hits/
 scan_results.json
 data/raw/
 .DS_Store
+
+# resident photos from 311 (may show people/plates); manifest is committed
+media/frames/311/
+# generated media is large
+media/renders/*.mp4
+media/renders/genie_test/
+media/renders/genie_png/

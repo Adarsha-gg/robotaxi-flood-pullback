@@ -1,0 +1,722 @@
+[
+ {
+  "t": "2026-11-18T06:52:55",
+  "address": "1479 DAVIDSON AVE, Virtual",
+  "lat": 37.74440612491831,
+  "lon": -122.38930325606141,
+  "cell": "r29_c68",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795013569/mpvxobvgekxfrxtnepsa.jpg",
+  "path": "media/frames/311/0652_mpvxobvgekxfrxtnepsa.jpg"
+ },
+ {
+  "t": "2026-11-18T07:53:45",
+  "address": "100 CASTRO ST",
+  "lat": 37.76709673275149,
+  "lon": -122.43587759909954,
+  "cell": "r44_c44",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795017218/aqsvui7puvx5jz7qj4ur.jpg",
+  "path": "media/frames/311/0753_aqsvui7puvx5jz7qj4ur.jpg"
+ },
+ {
+  "t": "2026-11-18T07:58:42",
+  "address": "INTERSECTION TREAT AVE, PRECITA AVE",
+  "lat": 37.74682166666667,
+  "lon": -122.41255833333334,
+  "cell": "r31_c56",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795017516/uiecspef2kjprhrcmk1j.jpg",
+  "path": "media/frames/311/0758_uiecspef2kjprhrcmk1j.jpg"
+ },
+ {
+  "t": "2026-11-18T08:43:41",
+  "address": "1294 9TH AVE",
+  "lat": 37.764125878543595,
+  "lon": -122.46626931039287,
+  "cell": "r42_c28",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795020208/oq6c6ucyv6ta1j8vacia.jpg",
+  "path": "media/frames/311/0843_oq6c6ucyv6ta1j8vacia.jpg"
+ },
+ {
+  "t": "2026-11-18T09:01:34",
+  "address": "2248 23RD ST",
+  "lat": 37.75466166666663,
+  "lon": -122.40250333333334,
+  "cell": "r36_c61",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795021290/n7spup3lzxzmhnxgi5y0.jpg",
+  "path": "media/frames/311/0901_n7spup3lzxzmhnxgi5y0.jpg"
+ },
+ {
+  "t": "2026-11-18T09:10:06",
+  "address": "199 JONES ST",
+  "lat": 37.78296212449706,
+  "lon": -122.41250038146973,
+  "cell": "r55_c56",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795021793/nciaiilrrhxwuq9j77am.jpg",
+  "path": "media/frames/311/0910_nciaiilrrhxwuq9j77am.jpg"
+ },
+ {
+  "t": "2026-11-18T09:10:56",
+  "address": "673 BRANNAN ST",
+  "lat": 37.7752322158577,
+  "lon": -122.4003293142108,
+  "cell": "r50_c62",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795021847/cikc9js0mmzuegvqyjq4.jpg",
+  "path": "media/frames/311/0910_cikc9js0mmzuegvqyjq4.jpg"
+ },
+ {
+  "t": "2026-11-18T09:11:32",
+  "address": "3695 JACKSON ST",
+  "lat": 37.789755,
+  "lon": -122.45569666666667,
+  "cell": "r59_c33",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795021883/mzczlzj74hazexqcxudp.jpg",
+  "path": "media/frames/311/0911_mzczlzj74hazexqcxudp.jpg"
+ },
+ {
+  "t": "2026-11-18T09:16:22",
+  "address": "1617 CHURCH ST",
+  "lat": 37.74467762850675,
+  "lon": -122.42670191522393,
+  "cell": "r29_c49",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795022173/lvkuuxvbdbr6yp1xxvvd.jpg",
+  "path": "media/frames/311/0916_lvkuuxvbdbr6yp1xxvvd.jpg"
+ },
+ {
+  "t": "2026-11-18T09:18:04",
+  "address": "INTERSECTION BRODERICK ST, HAIGHT ST",
+  "lat": 37.77103,
+  "lon": -122.43868833333333,
+  "cell": "r47_c42",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795022270/msmqrburzhh2pgyhjyok.jpg",
+  "path": "media/frames/311/0918_msmqrburzhh2pgyhjyok.jpg"
+ },
+ {
+  "t": "2026-11-18T09:23:57",
+  "address": "204 PARK PRESIDIO BLVD, Virtual",
+  "lat": 37.784305,
+  "lon": -122.47249666666667,
+  "cell": "r56_c25",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795022627/hluz5swcgocr3nnbqnbb.jpg",
+  "path": "media/frames/311/0923_hluz5swcgocr3nnbqnbb.jpg"
+ },
+ {
+  "t": "2026-11-18T09:28:17",
+  "address": "139 WELSH ST",
+  "lat": 37.77865333333333,
+  "lon": -122.398095,
+  "cell": "r52_c64",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795022863/j53gvdvfhrmecz2bzxeb.jpg",
+  "path": "media/frames/311/0928_j53gvdvfhrmecz2bzxeb.jpg"
+ },
+ {
+  "t": "2026-11-18T09:31:17",
+  "address": "3405 20TH ST",
+  "lat": 37.758751067436755,
+  "lon": -122.4170423671603,
+  "cell": "r39_c54",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023064/p5g6odmatqh5amzg8uhs.jpg",
+  "path": "media/frames/311/0931_p5g6odmatqh5amzg8uhs.jpg"
+ },
+ {
+  "t": "2026-11-18T09:31:51",
+  "address": "401 28TH AVE",
+  "lat": 37.78173796896106,
+  "lon": -122.48825236153932,
+  "cell": "r54_c16",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023104/gh0ul8vtfhid6dymvfok.jpg",
+  "path": "media/frames/311/0931_gh0ul8vtfhid6dymvfok.jpg"
+ },
+ {
+  "t": "2026-11-18T09:33:17",
+  "address": "2480 SAN BRUNO AVE",
+  "lat": 37.730442410154346,
+  "lon": -122.40492657895378,
+  "cell": "r20_c60",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023191/ozzllkmwas3sqsy3djde.jpg",
+  "path": "media/frames/311/0933_ozzllkmwas3sqsy3djde.jpg"
+ },
+ {
+  "t": "2026-11-18T09:37:13",
+  "address": "3411 20TH ST",
+  "lat": 37.7587106,
+  "lon": -122.41714179972223,
+  "cell": "r39_c54",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023424/dlb0v5rxzwm1ffj0c4kg.jpg",
+  "path": "media/frames/311/0937_dlb0v5rxzwm1ffj0c4kg.jpg"
+ },
+ {
+  "t": "2026-11-18T09:39:40",
+  "address": "496 SANCHEZ ST",
+  "lat": 37.76126099999996,
+  "lon": -122.43084699999999,
+  "cell": "r40_c46",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023567/v5j7gdm7unr3f1lcdpj4.jpg",
+  "path": "media/frames/311/0939_v5j7gdm7unr3f1lcdpj4.jpg"
+ },
+ {
+  "t": "2026-11-18T09:42:38",
+  "address": "160 MARINA BLVD, Virtual",
+  "lat": 37.80576011052404,
+  "lon": -122.43494276267921,
+  "cell": "r70_c44",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023746/z8abjdlk7il41wjkbrxh.jpg",
+  "path": "media/frames/311/0942_z8abjdlk7il41wjkbrxh.jpg"
+ },
+ {
+  "t": "2026-11-18T09:45:47",
+  "address": "1526 26TH AVE",
+  "lat": 37.75894483187938,
+  "lon": -122.48419649899006,
+  "cell": "r39_c18",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023933/z4ogzacmlwgdxkobuhhb.jpg",
+  "path": "media/frames/311/0945_z4ogzacmlwgdxkobuhhb.jpg"
+ },
+ {
+  "t": "2026-11-18T09:46:00",
+  "address": "INTERSECTION KIRKHAM ST, 20TH AVE",
+  "lat": 37.759677525980734,
+  "lon": -122.47788061802908,
+  "cell": "r39_c22",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023951/dc1k5bulgz7j7p0zkxaj.jpg",
+  "path": "media/frames/311/0946_dc1k5bulgz7j7p0zkxaj.jpg"
+ },
+ {
+  "t": "2026-11-18T09:46:00",
+  "address": "373 MARINA BLVD",
+  "lat": 37.80594133265207,
+  "lon": -122.43886959192362,
+  "cell": "r70_c42",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023950/dm2cvxp5tuflavx12wvd.jpg",
+  "path": "media/frames/311/0946_dm2cvxp5tuflavx12wvd.jpg"
+ },
+ {
+  "t": "2026-11-18T09:46:10",
+  "address": "INTERSECTION 46TH AVE, LINCOLN WAY",
+  "lat": 37.76408083418961,
+  "lon": -122.50618710901718,
+  "cell": "r42_c7",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795023965/ty3lv4lrrs5q57gfdutw.jpg",
+  "path": "media/frames/311/0946_ty3lv4lrrs5q57gfdutw.jpg"
+ },
+ {
+  "t": "2026-11-18T09:47:11",
+  "address": "3405 20TH ST",
+  "lat": 37.758680928689515,
+  "lon": -122.41691220195257,
+  "cell": "r39_c54",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024024/yxv1ybdjdyzqtrh8i8pc.jpg",
+  "path": "media/frames/311/0947_yxv1ybdjdyzqtrh8i8pc.jpg"
+ },
+ {
+  "t": "2026-11-18T09:47:19",
+  "address": "402 ELLIS ST",
+  "lat": 37.78492406788252,
+  "lon": -122.41288351055586,
+  "cell": "r56_c56",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024027/ibtxkue2vtbinenlio7m.jpg",
+  "path": "media/frames/311/0947_ibtxkue2vtbinenlio7m.jpg"
+ },
+ {
+  "t": "2026-11-18T09:48:18",
+  "address": "401 28TH AVE",
+  "lat": 37.7816849040424,
+  "lon": -122.48811352998018,
+  "cell": "r54_c16",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024088/czttlmicfupnsqvzk4hs.jpg",
+  "path": "media/frames/311/0948_czttlmicfupnsqvzk4hs.jpg"
+ },
+ {
+  "t": "2026-11-18T09:49:10",
+  "address": "INTERSECTION FILLMORE ST, RETIRO WAY",
+  "lat": 37.80616820862396,
+  "lon": -122.43744816511125,
+  "cell": "r70_c43",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024142/nshesfu47skovi26txbj.jpg",
+  "path": "media/frames/311/0949_nshesfu47skovi26txbj.jpg"
+ },
+ {
+  "t": "2026-11-18T09:49:29",
+  "address": "691 2ND ST, Virtual",
+  "lat": 37.78082341243119,
+  "lon": -122.39070052366117,
+  "cell": "r53_c68",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024163/cegfgqd2cp0yehms3cu4.jpg",
+  "path": "media/frames/311/0949_cegfgqd2cp0yehms3cu4.jpg"
+ },
+ {
+  "t": "2026-11-18T09:51:31",
+  "address": "1554 PAGE ST, Virtual",
+  "lat": 37.77107088363027,
+  "lon": -122.44640598288724,
+  "cell": "r47_c38",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024277/zcdgfo2zgx8hpok5snvp.jpg",
+  "path": "media/frames/311/0951_zcdgfo2zgx8hpok5snvp.jpg"
+ },
+ {
+  "t": "2026-11-18T09:51:40",
+  "address": "1356 BAKER ST",
+  "lat": 37.783786725661,
+  "lon": -122.44294224603335,
+  "cell": "r55_c40",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024294/qpki9dtxivbyqr7lfzvi.jpg",
+  "path": "media/frames/311/0951_qpki9dtxivbyqr7lfzvi.jpg"
+ },
+ {
+  "t": "2026-11-18T09:53:00",
+  "address": "INTERSECTION BAKER ST, SUTTER ST",
+  "lat": 37.784756068098645,
+  "lon": -122.4432573903824,
+  "cell": "r56_c40",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024373/watbn9pifrqgnap23gwg.jpg",
+  "path": "media/frames/311/0953_watbn9pifrqgnap23gwg.jpg"
+ },
+ {
+  "t": "2026-11-18T09:53:02",
+  "address": "1297 IRVING ST",
+  "lat": 37.76370561645797,
+  "lon": -122.47160013160807,
+  "cell": "r42_c25",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024372/g0qns03pbsfsmwgusdno.jpg",
+  "path": "media/frames/311/0953_g0qns03pbsfsmwgusdno.jpg"
+ },
+ {
+  "t": "2026-11-18T09:53:30",
+  "address": "36 MORRIS ST",
+  "lat": 37.77737680762232,
+  "lon": -122.40315484831726,
+  "cell": "r51_c61",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024404/yu3bcsimge7aifclbcrp.jpg",
+  "path": "media/frames/311/0953_yu3bcsimge7aifclbcrp.jpg"
+ },
+ {
+  "t": "2026-11-18T09:53:34",
+  "address": "201 27TH ST",
+  "lat": 37.746978192310536,
+  "lon": -122.42494100112413,
+  "cell": "r31_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024407/liun6lbxbmvcrid9e510.jpg",
+  "path": "media/frames/311/0953_liun6lbxbmvcrid9e510.jpg"
+ },
+ {
+  "t": "2026-11-18T09:53:40",
+  "address": "400 ASHBURY ST, Virtual",
+  "lat": 37.77176626766627,
+  "lon": -122.44720834994419,
+  "cell": "r47_c38",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024411/fxf1smqvpm7aegzucogk.jpg",
+  "path": "media/frames/311/0953_fxf1smqvpm7aegzucogk.jpg"
+ },
+ {
+  "t": "2026-11-18T09:55:10",
+  "address": "2301 LOMBARD ST",
+  "lat": 37.79929481898288,
+  "lon": -122.43945795530996,
+  "cell": "r66_c42",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024504/dlycefcsenmhphhrzyqv.jpg",
+  "path": "media/frames/311/0955_dlycefcsenmhphhrzyqv.jpg"
+ },
+ {
+  "t": "2026-11-18T09:55:38",
+  "address": "3881 CESAR CHAVEZ ST",
+  "lat": 37.74759069779744,
+  "lon": -122.42656389270505,
+  "cell": "r31_c49",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024528/xe3cdeu79jtae4a7z1wd.jpg",
+  "path": "media/frames/311/0955_xe3cdeu79jtae4a7z1wd.jpg"
+ },
+ {
+  "t": "2026-11-18T09:55:47",
+  "address": "146 NOE ST",
+  "lat": 37.76674589196531,
+  "lon": -122.4334814810466,
+  "cell": "r44_c45",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024540/yu95wig31qyr52xcr3qx.jpg",
+  "path": "media/frames/311/0955_yu95wig31qyr52xcr3qx.jpg"
+ },
+ {
+  "t": "2026-11-18T09:55:51",
+  "address": "402 ELLIS ST",
+  "lat": 37.784863148496235,
+  "lon": -122.41284438907239,
+  "cell": "r56_c56",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024539/juztqsvsppu1bn0ro4mx.jpg",
+  "path": "media/frames/311/0955_juztqsvsppu1bn0ro4mx.jpg"
+ },
+ {
+  "t": "2026-11-18T09:55:56",
+  "address": "1795 40TH AVE",
+  "lat": 37.753463333333336,
+  "lon": -122.499205,
+  "cell": "r35_c10",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024524/qgbbo3cxizvtlnon2fg4.jpg",
+  "path": "media/frames/311/0955_qgbbo3cxizvtlnon2fg4.jpg"
+ },
+ {
+  "t": "2026-11-18T09:56:53",
+  "address": "1500 GUERRERO ST",
+  "lat": 37.74717477284055,
+  "lon": -122.42256537763815,
+  "cell": "r31_c51",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024608/ytmisdi9kf5cjexzicin.jpg",
+  "path": "media/frames/311/0956_ytmisdi9kf5cjexzicin.jpg"
+ },
+ {
+  "t": "2026-11-18T09:57:32",
+  "address": "1777 OAK ST",
+  "lat": 37.77164175749102,
+  "lon": -122.44859290854167,
+  "cell": "r47_c37",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024644/tz67lp8rnl7po0tqox7u.jpg",
+  "path": "media/frames/311/0957_tz67lp8rnl7po0tqox7u.jpg"
+ },
+ {
+  "t": "2026-11-18T09:58:17",
+  "address": "2578 32ND AVE",
+  "lat": 37.73910333333333,
+  "lon": -122.48923666666667,
+  "cell": "r26_c16",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024684/yqxod8wcienfjy1n509l.jpg",
+  "path": "media/frames/311/0958_yqxod8wcienfjy1n509l.jpg"
+ },
+ {
+  "t": "2026-11-18T09:58:23",
+  "address": "2597 FRANKLIN ST, Virtual",
+  "lat": 37.798208817378764,
+  "lon": -122.42562566575498,
+  "cell": "r65_c49",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024697/gchqyddptiv02ctc9zu2.jpg",
+  "path": "media/frames/311/0958_gchqyddptiv02ctc9zu2.jpg"
+ },
+ {
+  "t": "2026-11-18T09:58:25",
+  "address": "164 DE SOTO ST, Virtual",
+  "lat": 37.724607472252316,
+  "lon": -122.4651813134551,
+  "cell": "r16_c28",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024696/ddnjilz0n4bqdf5sj3os.jpg",
+  "path": "media/frames/311/0958_ddnjilz0n4bqdf5sj3os.jpg"
+ },
+ {
+  "t": "2026-11-18T09:58:32",
+  "address": "1526 DOLORES ST",
+  "lat": 37.74500857945365,
+  "lon": -122.42472656947147,
+  "cell": "r30_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024703/l8nxfcwgluefxrntpenk.jpg",
+  "path": "media/frames/311/0958_l8nxfcwgluefxrntpenk.jpg"
+ },
+ {
+  "t": "2026-11-18T09:58:46",
+  "address": "803 BROTHERHOOD WAY, Virtual",
+  "lat": 37.71414170312218,
+  "lon": -122.47576528454482,
+  "cell": "r9_c23",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024715/fgqks5aiygh8dbdivmjz.jpg",
+  "path": "media/frames/311/0958_fgqks5aiygh8dbdivmjz.jpg"
+ },
+ {
+  "t": "2026-11-18T09:59:07",
+  "address": "880 5TH ST, Virtual",
+  "lat": 37.77413664864391,
+  "lon": -122.39574447904128,
+  "cell": "r49_c65",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024734/yurvx26amxmdryvpxpax.jpg",
+  "path": "media/frames/311/0959_yurvx26amxmdryvpxpax.jpg"
+ },
+ {
+  "t": "2026-11-18T10:00:05",
+  "address": "1410 DOLORES ST",
+  "lat": 37.746817787754445,
+  "lon": -122.42490140959228,
+  "cell": "r31_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024791/muk2td5dtyp1kg3nlj88.jpg",
+  "path": "media/frames/311/1000_muk2td5dtyp1kg3nlj88.jpg"
+ },
+ {
+  "t": "2026-11-18T10:00:31",
+  "address": "500 PIERCE ST",
+  "lat": 37.774549646820816,
+  "lon": -122.43419194001468,
+  "cell": "r49_c45",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024821/gd0lbj4ue5pm1rdhwirx.jpg",
+  "path": "media/frames/311/1000_gd0lbj4ue5pm1rdhwirx.jpg"
+ },
+ {
+  "t": "2026-11-18T10:00:35",
+  "address": "1701 DIVISADERO ST",
+  "lat": 37.78543269999998,
+  "lon": -122.4402302,
+  "cell": "r56_c41",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024829/anpovtp9fkkeq77i1b40.jpg",
+  "path": "media/frames/311/1000_anpovtp9fkkeq77i1b40.jpg"
+ },
+ {
+  "t": "2026-11-18T10:00:39",
+  "address": "1672 OAK ST, Virtual",
+  "lat": 37.77204406728449,
+  "lon": -122.44684733104195,
+  "cell": "r48_c38",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024827/vwfy0gwbknfl2h39ipm6.jpg",
+  "path": "media/frames/311/1000_vwfy0gwbknfl2h39ipm6.jpg"
+ },
+ {
+  "t": "2026-11-18T10:00:55",
+  "address": "143 MAIN ST, Virtual",
+  "lat": 37.791354994462814,
+  "lon": -122.39418715159981,
+  "cell": "r60_c66",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024842/q1n1f5rpuwd2u8dx6fmv.jpg",
+  "path": "media/frames/311/1000_q1n1f5rpuwd2u8dx6fmv.jpg"
+ },
+ {
+  "t": "2026-11-18T10:01:32",
+  "address": "801 25TH ST",
+  "lat": 37.77468591273438,
+  "lon": -122.39609739764722,
+  "cell": "r49_c65",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024879/ygjtmwe1ktqbur6f2ri6.jpg",
+  "path": "media/frames/311/1001_ygjtmwe1ktqbur6f2ri6.jpg"
+ },
+ {
+  "t": "2026-11-18T10:01:44",
+  "address": "INTERSECTION VALLEJO ST, STEINER ST",
+  "lat": 37.795078333333336,
+  "lon": -122.4367,
+  "cell": "r63_c43",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024898/vyhklo03hwdeoqdqyddi.jpg",
+  "path": "media/frames/311/1001_vyhklo03hwdeoqdqyddi.jpg"
+ },
+ {
+  "t": "2026-11-18T10:02:07",
+  "address": "INTERSECTION CALIFORNIA ST, BRODERICK ST",
+  "lat": 37.78789721257354,
+  "lon": -122.44220125696083,
+  "cell": "r58_c40",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024918/i4qnkzvsqsxdb1ij2gmp.jpg",
+  "path": "media/frames/311/1002_i4qnkzvsqsxdb1ij2gmp.jpg"
+ },
+ {
+  "t": "2026-11-18T10:02:21",
+  "address": "801 4TH ST, Virtual",
+  "lat": 37.776428333333335,
+  "lon": -122.39386666666667,
+  "cell": "r50_c66",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024933/wuchzor9fnlfclimwo2l.jpg",
+  "path": "media/frames/311/1002_wuchzor9fnlfclimwo2l.jpg"
+ },
+ {
+  "t": "2026-11-18T10:02:41",
+  "address": "2087 MARKET ST",
+  "lat": 37.76745787097766,
+  "lon": -122.42872200007517,
+  "cell": "r44_c48",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024952/qiq9gwwswnrmske5uoek.jpg",
+  "path": "media/frames/311/1002_qiq9gwwswnrmske5uoek.jpg"
+ },
+ {
+  "t": "2026-11-18T10:03:05",
+  "address": "2938 23RD ST",
+  "lat": 37.754345,
+  "lon": -122.41086333333334,
+  "cell": "r36_c57",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795024973/ol3xfrt79nexf6pzovue.jpg",
+  "path": "media/frames/311/1003_ol3xfrt79nexf6pzovue.jpg"
+ },
+ {
+  "t": "2026-11-18T10:03:28",
+  "address": "297 KING ST, Virtual",
+  "lat": 37.776307849285544,
+  "lon": -122.39375088687146,
+  "cell": "r50_c66",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025001/gtxauchp97yl4qgsa8jj.jpg",
+  "path": "media/frames/311/1003_gtxauchp97yl4qgsa8jj.jpg"
+ },
+ {
+  "t": "2026-11-18T10:04:00",
+  "address": "300 TRUMBULL ST",
+  "lat": 37.730828840104934,
+  "lon": -122.42386490106583,
+  "cell": "r20_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025030/d1vt8xopyxf9mmbmtvrh.jpg",
+  "path": "media/frames/311/1004_d1vt8xopyxf9mmbmtvrh.jpg"
+ },
+ {
+  "t": "2026-11-18T10:04:14",
+  "address": "INTERSECTION CAYUGA AVE, ONEIDA AVE",
+  "lat": 37.72093612915493,
+  "lon": -122.44043497892694,
+  "cell": "r13_c41",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025042/zpdnnsiaafexwpb0vmsx.jpg",
+  "path": "media/frames/311/1004_zpdnnsiaafexwpb0vmsx.jpg"
+ },
+ {
+  "t": "2026-11-18T10:04:43",
+  "address": "340 LAKE MERCED BLVD, Virtual",
+  "lat": 37.72905618437897,
+  "lon": -122.49219563128486,
+  "cell": "r19_c14",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025076/wft4pspjobghsozylpso.jpg",
+  "path": "media/frames/311/1004_wft4pspjobghsozylpso.jpg"
+ },
+ {
+  "t": "2026-11-18T10:04:44",
+  "address": "746 DOUGLASS ST",
+  "lat": 37.75189141309519,
+  "lon": -122.43866944956038,
+  "cell": "r34_c42",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025071/tz8dufglxbarldwntp8m.jpg",
+  "path": "media/frames/311/1004_tz8dufglxbarldwntp8m.jpg"
+ },
+ {
+  "t": "2026-11-18T10:06:00",
+  "address": "58 14TH ST",
+  "lat": 37.76855050676359,
+  "lon": -122.41479788409454,
+  "cell": "r45_c55",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025147/fjbjvtnddcf05nsyi9sb.jpg",
+  "path": "media/frames/311/1006_fjbjvtnddcf05nsyi9sb.jpg"
+ },
+ {
+  "t": "2026-11-18T10:06:22",
+  "address": "3794 KIRKHAM ST",
+  "lat": 37.75882699055074,
+  "lon": -122.50145916920704,
+  "cell": "r39_c9",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025176/lhixdz41av1pomfj4eva.jpg",
+  "path": "media/frames/311/1006_lhixdz41av1pomfj4eva.jpg"
+ },
+ {
+  "t": "2026-11-18T10:06:26",
+  "address": "209 HAZELWOOD AVE",
+  "lat": 37.73178055555556,
+  "lon": -122.45501388888889,
+  "cell": "r21_c34",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025179/gwtl9nqxsvfxonxdtzwe.jpg",
+  "path": "media/frames/311/1006_gwtl9nqxsvfxonxdtzwe.jpg"
+ },
+ {
+  "t": "2026-11-18T10:06:57",
+  "address": "160 CENTRAL AVE",
+  "lat": 37.771296666666665,
+  "lon": -122.44365,
+  "cell": "r47_c40",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025214/m4mkkdhp7bens8vlx6rj.jpg",
+  "path": "media/frames/311/1006_m4mkkdhp7bens8vlx6rj.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:31",
+  "address": "701 CAYUGA AVE, Virtual",
+  "lat": 37.72709218389799,
+  "lon": -122.43680184320307,
+  "cell": "r18_c43",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025222/ll83patu0z0lpf09ghru.jpg",
+  "path": "media/frames/311/1007_ll83patu0z0lpf09ghru.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:34",
+  "address": "199 BAKER ST, Virtual",
+  "lat": 37.772613965653825,
+  "lon": -122.44089365971367,
+  "cell": "r48_c41",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025245/h0ypsqcqfykpiaxsqqyy.jpg",
+  "path": "media/frames/311/1007_h0ypsqcqfykpiaxsqqyy.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:39",
+  "address": "1604 DOLORES ST",
+  "lat": 37.743735143755046,
+  "lon": -122.42455035327784,
+  "cell": "r29_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025249/bjqfhplacic0prhtn9dm.jpg",
+  "path": "media/frames/311/1007_bjqfhplacic0prhtn9dm.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:44",
+  "address": "501 DIVISADERO ST",
+  "lat": 37.774137110072296,
+  "lon": -122.43782312119754,
+  "cell": "r49_c43",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025257/eowqqftdnrjm6cibhlo2.jpg",
+  "path": "media/frames/311/1007_eowqqftdnrjm6cibhlo2.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:51",
+  "address": "1200 26TH AVE",
+  "lat": 37.76493215343365,
+  "lon": -122.48469098727347,
+  "cell": "r43_c18",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025262/hulrmbdgyazbuptrdhqc.jpg",
+  "path": "media/frames/311/1007_hulrmbdgyazbuptrdhqc.jpg"
+ },
+ {
+  "t": "2026-11-18T10:07:58",
+  "address": "188 ROUSSEAU ST, Virtual",
+  "lat": 37.731541666666665,
+  "lon": -122.429925,
+  "cell": "r21_c47",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025271/xahutqh0x9jfzuplag2y.jpg",
+  "path": "media/frames/311/1007_xahutqh0x9jfzuplag2y.jpg"
+ },
+ {
+  "t": "2026-11-18T10:08:04",
+  "address": "52 LEAVENWORTH ST, Virtual",
+  "lat": 37.78105622639653,
+  "lon": -122.41368823168611,
+  "cell": "r54_c55",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025273/aqjfswctlpskbd9t1ngh.jpg",
+  "path": "media/frames/311/1008_aqjfswctlpskbd9t1ngh.jpg"
+ },
+ {
+  "t": "2026-11-18T10:08:29",
+  "address": "340 6TH ST",
+  "lat": 37.77790068132026,
+  "lon": -122.40507755520721,
+  "cell": "r51_c60",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025300/enbxnnwtzqrf82eudxvx.jpg",
+  "path": "media/frames/311/1008_enbxnnwtzqrf82eudxvx.jpg"
+ },
+ {
+  "t": "2026-11-18T10:09:01",
+  "address": "1931 EVANS AVE, Virtual",
+  "lat": 37.74641059353791,
+  "lon": -122.39468146115543,
+  "cell": "r30_c65",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025328/bfa4ilcyq6yzjltmshm0.jpg",
+  "path": "media/frames/311/1009_bfa4ilcyq6yzjltmshm0.jpg"
+ },
+ {
+  "t": "2026-11-18T10:09:03",
+  "address": "235 GOUGH ST",
+  "lat": 37.775475,
+  "lon": -122.42280833333334,
+  "cell": "r50_c51",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025336/t7cilszuqjqjrvkukhvu.jpg",
+  "path": "media/frames/311/1009_t7cilszuqjqjrvkukhvu.jpg"
+ },
+ {
+  "t": "2026-11-18T10:09:06",
+  "address": "501 HAYES ST",
+  "lat": 37.776672482338505,
+  "lon": -122.4247140522023,
+  "cell": "r51_c50",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025336/creo20bufuu4vvm02rc9.jpg",
+  "path": "media/frames/311/1009_creo20bufuu4vvm02rc9.jpg"
+ },
+ {
+  "t": "2026-11-18T10:10:06",
+  "address": "804 RUSSIA AVE",
+  "lat": 37.718392445248874,
+  "lon": -122.43071413785418,
+  "cell": "r12_c46",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025396/wlkuyvyzobknyupwviat.jpg",
+  "path": "media/frames/311/1010_wlkuyvyzobknyupwviat.jpg"
+ },
+ {
+  "t": "2026-11-18T10:10:50",
+  "address": "2998 STEINER ST, Virtual",
+  "lat": 37.79685333333333,
+  "lon": -122.43701166666666,
+  "cell": "r64_c43",
+  "url": "https://spot-sf-res.cloudinary.com/image/upload/v1795025438/aogx8cfnhtgupev0of3l.jpg",
+  "path": "media/frames/311/1010_aogx8cfnhtgupev0of3l.jpg"
+ }
+]

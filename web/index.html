@@ -60,6 +60,21 @@ h2{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
     <span><span class="dot" style="background:#fff"></span>flood missed</span>
   </div>
 </header>
+<div id="genie" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(5,7,10,.92);padding:18px;overflow:auto">
+  <div style="max-width:1400px;margin:0 auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+      <div><b style="font-size:16px">Genie 4 · <span id="gZone"></span></b>
+        <div id="gStatus" style="color:var(--muted);font-size:12px">starting…</div></div>
+      <div class="bar"><button id="gSave">Stop &amp; save MP4</button><button id="gClose">Close</button></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 2.2fr;gap:14px;margin-top:12px">
+      <div><div style="color:var(--muted);font-size:12px;margin-bottom:6px">REAL 311 photo from a resident · <span id="gWhen"></span></div>
+        <img id="gPhoto" style="width:100%;border-radius:8px;border:1px solid var(--line)"></div>
+      <div><div style="color:var(--muted);font-size:12px;margin-bottom:6px">GENERATED live by Genie 4 from that photo · drive with W A S D / arrows · illustration, not a measurement</div>
+        <img id="gLive" style="width:100%;aspect-ratio:16/9;background:#000;border-radius:8px;border:1px solid var(--blue)"></div>
+    </div>
+  </div>
+</div>
 <div id="banner">11:00 AM · Waymo paused all San Francisco service</div>
 <main>
   <div id="map"></div>
@@ -143,11 +158,12 @@ function renderList() {
       <h3><span>${esc(z.name)}</span><span class="st ${z.status}">${z.status}</span></h3>
       <p>${z.start.slice(11, 16)}–${z.end.slice(11, 16)} · ${z.cells.length} cells · p=${z.p_flood}${z.source === 'camera' ? ' · from a car camera' : ''}</p>
       <p>${esc(z.reason)}</p>
-      <div class="btns"><button class="ok" data-a="approved">Approve</button><button data-a="rejected">Reject</button></div>
+      <div class="btns"><button class="ok" data-a="approved">Approve</button><button data-a="rejected">Reject</button><button data-g="1" style="border-color:var(--blue)">Drive it in Genie 4</button></div>
     </div>`).join('');
   el.querySelectorAll('.zone').forEach(d => {
     d.addEventListener('click', e => {
       const a = e.target.dataset.a;
+      if (e.target.dataset.g) { e.stopPropagation(); openGenie(d.dataset.id); return; }
       if (a) { e.stopPropagation(); setStatus([d.dataset.id], a); } else select(d.dataset.id);
     });
   });
@@ -228,6 +244,46 @@ function tick(now) {
   if (clock >= T1) { clock = T1; playing = false; document.getElementById('play').textContent = '▶ Play'; }
   update(); if (playing) requestAnimationFrame(tick);
 }
+// ---- Genie 4 live world ----
+let gOpen = false, gPoll = null;
+const KEYMAP = {w: 'key_w', a: 'key_a', s: 'key_s', d: 'key_d', ArrowUp: 'arrow_up', ArrowDown: 'arrow_down', ArrowLeft: 'arrow_left', ArrowRight: 'arrow_right', ' ': 'space'};
+const held = new Set();
+const post = (u, b) => j(u, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(b)});
+async function openGenie(zoneId) {
+  const el = document.getElementById('genie'); el.style.display = 'block'; gOpen = true;
+  document.getElementById('gStatus').textContent = 'Starting Genie 4 world from a real photo…';
+  const r = await post('/api/genie/start', {date: DATE, set: SET, zone_id: zoneId, max_seconds: 60}).catch(e => ({error: String(e)}));
+  if (r.error) { document.getElementById('gStatus').textContent = r.error; return; }
+  document.getElementById('gZone').textContent = r.photo.zone;
+  document.getElementById('gWhen').textContent = `${r.photo.address} · ${r.photo.t.slice(11, 16)} on ${r.photo.t.slice(0, 10)}`;
+  document.getElementById('gPhoto').src = '/' + r.photo.path;
+  document.getElementById('gLive').src = '/api/genie/stream?ts=' + Date.now();
+  clearInterval(gPoll);
+  gPoll = setInterval(async () => {
+    const s = await j('/api/genie/status').catch(() => null); if (!s) return;
+    document.getElementById('gStatus').textContent = s.status === 'live'
+      ? `LIVE · ${s.seconds}s of ${s.max_seconds}s · ${s.frames} frames · first frame after ${s.first_frame_s}s · ~$${(s.seconds * 0.1).toFixed(2)}`
+      : `${s.status}${s.error ? ' · ' + s.error : ''}${s.status === 'warming' || s.status === 'starting' ? ' (first frame takes ~5 s)' : ''}`;
+    if (s.status === 'stopped' || s.status === 'error') clearInterval(gPoll);
+  }, 1000);
+}
+async function closeGenie(save) {
+  clearInterval(gPoll); held.clear();
+  const r = await post('/api/genie/stop', {save}).catch(() => ({}));
+  if (save && r.path) { document.getElementById('gStatus').innerHTML = `Saved <a href="/${r.path}" target="_blank" style="color:var(--blue)">${r.path}</a>`; return; }
+  document.getElementById('genie').style.display = 'none'; gOpen = false; document.getElementById('gLive').src = '';
+}
+document.getElementById('gClose').onclick = () => closeGenie(false);
+document.getElementById('gSave').onclick = () => closeGenie(true);
+addEventListener('keydown', e => {
+  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (!gOpen || !k) return;
+  e.preventDefault(); if (held.has(k)) return; held.add(k); post('/api/genie/key', {action: 'key_down', key: k});
+});
+addEventListener('keyup', e => {
+  const k = KEYMAP[e.key.length === 1 ? e.key.toLowerCase() : e.key]; if (!gOpen || !k) return;
+  held.delete(k); post('/api/genie/key', {action: 'key_up', key: k});
+});
+
 const tripLayer = L.layerGroup().addTo(map);
 let trip = {from: [37.7502, -122.4337], to: [37.7840, -122.4010]}, picking = 0;
 async function routeTrip() {
