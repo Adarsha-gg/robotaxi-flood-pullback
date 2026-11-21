@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from pathlib import Path
 from typing import Any
 
-from gem.client import get_beta_client
+from gem.client import shared_beta_client
 from gem.vision import (
     DECISION_MODEL,
     DEPTH_CRITERIA,
@@ -190,7 +190,7 @@ def prewarm(watch: dict, warning: dict, session_holder: dict) -> dict:
 
 def _judge_sim_frame_strict(jpeg: bytes) -> dict[str, Any]:
     """Single Decision 1 call returning CAR-FLOODED rubric answers (raises on failure)."""
-    beta = get_beta_client()
+    beta = shared_beta_client()
     small_jpeg = _shrink_jpeg(jpeg)
     image_b64 = base64.b64encode(small_jpeg).decode("ascii")
 

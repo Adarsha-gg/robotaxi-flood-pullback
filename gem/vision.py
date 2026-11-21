@@ -12,7 +12,7 @@ from typing import Any
 
 from google.genai import types
 
-from gem.client import get_beta_client, get_client
+from gem.client import get_beta_client, get_client, shared_beta_client
 
 DECISION_MODEL = "models/gemini-decision-1"
 VIDEO_MODEL = "gemini-4-hydrogen"
@@ -49,7 +49,7 @@ def judge_frame(jpeg: bytes) -> dict[str, Any]:
     Returns exact contract keys:
       {"flooded_p": float, "depth_score": float, "depth_label": str, "latency_ms": int}
     """
-    beta = get_beta_client()
+    beta = shared_beta_client()
     small_jpeg = _shrink_jpeg(jpeg)
     image_b64 = base64.b64encode(small_jpeg).decode("ascii")
 
