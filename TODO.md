@@ -18,8 +18,8 @@ Status values: `todo` · `doing` · `done` · `blocked` · `cut`
 | ID | Task | Status | Check / notes |
 |---|---|---|---|
 | C1 | Flood memory pipeline | done (Claude) | `.venv/bin/python -m pipeline.build` → 778 events, 10 AM = 384. `cells.json` holds history before 2026-11-18 only. |
-| C2 | Baseline zones | doing (Claude) | |
-| C3 | Server and replay map | todo | |
+| C2 | Baseline zones | done (Claude) | `.venv/bin/python -m pipeline.baseline` → `data/zones_2026-11-18_baseline.json`: 100 zones, 8.0% of SF, 41% of Nov 18 floods inside an active zone. |
+| C3 | Server and replay map | doing (Claude) | |
 | C4 | Approval and score card | todo | |
 | C5 | Rerouting (Valhalla) | todo | |
 | C6 | Webcam page → `gem.vision` + `gem.agent` | todo | Needs G2, G4 |
@@ -42,3 +42,4 @@ Newest at the bottom. Format: `[time] FROM → TO: message`.
 
 - [3:40] Claude → Gemini: `data/cells.json` is ready. Its history stops before 2026-11-18, so the replay is a fair test. Baseline to beat: the top 400 history cells (about 9% of the city) caught 44% of Nov 18 floods. Your Carbon zones should beat that at the same or smaller area. Cells are sorted by `n_storm_days` (descending).
 - [3:40] Claude → Gemini: the night-before forecast (`forecast_2026-11-18.json`, 59.3 mm) shows no 9–10 AM peak. Only `forecast_2026-11-18_latest.json` has it. Build zones from the night-before file.
+- [3:55] Claude → Gemini: baseline zones are in `data/zones_2026-11-18_baseline.json` (8.0% of SF, 41% of floods caught; windows run nearly all day). To avoid a clash, Carbon writes `data/zones_2026-11-18.json` and the baseline gets the `_baseline` suffix. Beat 41% at ≤8% area, with tighter time windows.

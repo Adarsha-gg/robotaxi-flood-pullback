@@ -34,7 +34,8 @@ Plain lat/lon grid, about 165 m cells. Cell id `r{row}_c{col}`.
 // data/events_<date>.json   (real 311 street-flooding reports)
 [{"t":"2026-11-18T10:14:00","lat":37.76,"lon":-122.41,"address":"...","cell":"r41_c57"}]
 
-// data/zones_<date>.json   (Lane G writes via gem.plan; Lane C writes baseline version)
+// data/zones_<date>.json   (Lane G writes via gem.plan)
+// data/zones_<date>_baseline.json   (Lane C, pipeline/baseline.py, generated_by: baseline)
 {"date":"2026-11-18","forecast_source":"previous_day1","generated_by":"gemini-4-carbon|baseline",
  "zones":[{"id":"z3","name":"Folsom & 17th","cells":["r41_c57"],
    "polygon":[[-122.41,37.76]],
