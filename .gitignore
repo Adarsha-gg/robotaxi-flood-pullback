@@ -1,0 +1,13 @@
+# secrets
+.env
+.env.*
+# python
+.venv/
+__pycache__/
+*.pyc
+# scratch outputs from experiments
+*.jpg
+hits/
+scan_results.json
+data/raw/
+.DS_Store
