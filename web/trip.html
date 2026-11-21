@@ -25,8 +25,6 @@
     <div id="map"></div>
     <div class="hud brand"><b>Flood <span>Pull-Back</span></b>
       <div class="tabs"><a href="/">Replay · Nov 18</a><a href="/trip" class="on">Live trip</a></div></div>
-    <div class="hud trip"><div class="clock" id="clock">--:--</div>
-      <div class="tripline"><span id="tripName">pick two places</span> · <span id="state">ready</span></div></div>
     <div class="hud stage" id="stage"></div>
     <div class="hud caption" id="caption"></div>
     <div class="hud legend">
@@ -39,7 +37,13 @@
     </div>
   </div>
   <aside>
-    <div class="head"><h2>Robotaxi brain</h2></div>
+    <div class="tripcard">
+      <div class="tc-top"><span>W-112 · ROBOTAXI</span><span class="r"><span id="state" class="pillst">ready</span><button id="pauseBtn" title="Pause (Space)" onclick="togglePause()">⏸</button></span></div>
+      <div class="tc-clock"><div class="clock" id="clock">--:--</div><div id="eta"><b>Live · today</b>San Francisco time</div></div>
+      <div class="tc-route" id="tripName">Pick two places</div>
+      <div class="tc-bar"><div id="prog"></div></div>
+    </div>
+    <div id="steps"></div>
     <div class="form" id="form">
       <label>From</label><input id="from" value="Noe Valley">
       <label>To</label><input id="to" value="Chase Center">
@@ -53,7 +57,7 @@
       <h3>Any two places in San Francisco, right now.</h3>
       <p>Today’s 311 reports, forecast, closures and live cameras. Genie 4 simulates the worst spot. Gemini 4 Carbon decides.</p>
       <button class="btn wide" id="go">▶ Go</button></div></div>
-    <div class="src">Real data: SF 311, SFMTA, Open-Meteo, Caltrans. Genie scenes are simulations.</div>
+    <div class="src">Real data: SF 311, SFMTA, Open-Meteo, Caltrans, NWS. Genie scenes are simulations.<a href="/cam">Agent console</a><a href="/ops">City ops</a></div>
   </aside>
 </div>
 <script src="/web/app.js"></script>
@@ -84,14 +88,17 @@ async function go() {
   Object.values(lay).forEach(l => l.clearLayers()); $('feed').innerHTML = ''; current = null; say('');
   try {
     // places + fastest route + scan + Carbon's route choice (one server call)
+    initSteps([['Right now', 'Today’s floods, rain, closures'], ['Scan the route', 'Reports, flood history, closures'], ['Cameras', 'Live Caltrans views'], ['Simulate', 'Genie 4 · the spot ahead'], ['Decide', 'Gemini 4 Carbon · no human']]);
+    step(0, 'active'); progress(0);
     card('Planning', `${esc(from)} → ${esc(to)}`, 'Surface streets only. Robotaxis are off California freeways since Nov 11.');
     state('planning'); say('Finding the fastest route…');
     const P = await post('/api/trip/plan', {from, to});
     if (!alive()) return;
     if (!P || P.error || !P.fast) { card('Could not plan', esc(P?.error || 'Could not reach the server')); state('error'); return; }
+    const fast = P.fast;
     $('tripName').textContent = `${short(P.from.label)} → ${short(P.to.label)}`;
     $('clock').textContent = hm(P.depart);
-    const fast = P.fast;
+    etaLine(`<b>ETA ${hm(fast.times.at(-1))}</b>${fast.km} km · ${Math.round(fast.min)} min · fastest`);
     abpin(P.from.lat, P.from.lon, 'A · ' + short(P.from.label)); abpin(P.to.lat, P.to.lon, 'B · ' + short(P.to.label));
     fastLine(fast.coords);
     map.fitBounds(L.latLngBounds(fast.coords), PAD);
@@ -103,11 +110,13 @@ async function go() {
     const xt = card(`Right now · ${day} · ${hm(P.depart)}`, `${P.notices_all.length} street floods in the last 3 days`,
       `Rain today: ${P.rain_today_mm} mm · ${P.closures_today} lane closures today · ${P.cams.length} live cameras near this route`);
     const fmx = Math.max(...P.forecast.map(h => h.mm), 1);
-    xt.innerHTML = `<div class="rain">${P.forecast.map(h => `<div style="height:${Math.max(5, h.mm / fmx * 100)}%"><span>${hm(h.t)}</span></div>`).join('')}</div>`;
+    const al = (P.alerts || []).filter(a => /flood/i.test(a.event));
+    xt.innerHTML = (al.length ? `<div class="alertchip">⚠ NWS ${esc(al[0].event)} · until ${new Date(al[0].ends).toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})}</div>` : '') + `<div class="rain">${P.forecast.map(h => `<div style="height:${Math.max(5, h.mm / fmx * 100)}%"><span>${hm(h.t)}</span></div>`).join('')}</div>`;
     for (const n of P.notices_all) { floodDot({lat: n.lat, lon: n.lon, t: n.t.replace(' ', 'T'), address: n.address}); await sleep(12); }
     P.cams.forEach(camPin);
     await sleep(3000);
     if (!alive()) return;
+    step(0, 'done', `${P.notices_all.length} floods in 3 days · ${P.rain_today_mm} mm rain today${al.length ? ' · ' + esc(al[0].event) : ''}`); step(1, 'active');
     collapse(`<b>Right now</b> · ${P.notices_all.length} floods in 3 days · ${P.rain_today_mm} mm rain today`);
 
     // scan
@@ -124,6 +133,7 @@ async function go() {
       ${closures.slice(0, 3).map(c => `<li><span>${esc(title(c.street))}</span><small>${impact(c.impact)}</small></li>`).join('')}</ul>`;
     await sleep(3200);
     if (!alive()) return;
+    step(1, 'done', parts.join(' · ') || 'All clear'); step(2, 'active');
     collapse(`<b>Scanned the route</b> · ${parts.join(' · ') || 'all clear'}`);
 
     // live cameras
@@ -142,6 +152,7 @@ async function go() {
       if (lead) { const m = P.cams.find(x => x.id === lead.cam); if (m) map.flyTo([m.lat, m.lon], 15, {duration: 1}); }
       await sleep(3200);
       collapse(`<b>Live cameras</b> · ${on} of ${cams.length} online`);
+      step(2, 'done', `${on} of ${cams.length} online now`);
     }
 
     // start driving the fastest route; simulate only when a flagged spot comes up ahead
@@ -157,7 +168,8 @@ async function go() {
     async function driveTo(Rt, i0, i1, msPerMin, line) {
       const mins = Rt.times.map(toMin); let v = mins[i0], last = performance.now(), i = i0;
       while (alive() && v < mins[i1]) {
-        const now = performance.now(); v = Math.min(mins[i1], v + (now - last) / msPerMin); last = now;
+        const now = performance.now(); v = Math.min(mins[i1], v + Math.min(now - last, 100) / msPerMin); last = now;
+        progress((v - tmin[0]) / (tmin.at(-1) - tmin[0]));
         while (i < i1 - 1 && mins[i + 1] <= v) { i++; line && line.addLatLng(Rt.coords[i]); }
         car.setLatLng(Rt.coords[i]); $('clock').textContent = fmt(v); await sleep(33);
       }
@@ -180,6 +192,7 @@ async function go() {
       map.flyTo([T.lat, T.lon], 15, {duration: 1});
       await sleep(2400);
       if (!alive()) return;
+      step(2, 'done'); step(3, 'active', `${esc(title(T.name))} at ${hm(fast.times[kT])}`);
       card('Simulating with Genie 4', esc(title(T.name)), 'Built from a real image. Played forward to the minute the car would arrive.');
       const sc = CAMS.find(c => c.cam === PICK.sim_cam && c.available && c.frame);
       const etaT = fast.times[kT], fh = P.forecast.find(h => h.t.slice(0, 13) === etaT.slice(0, 13));
@@ -201,6 +214,7 @@ async function go() {
         await sleep(3600);
         await stageClose();
         collapse(`<b>Simulated ${esc(title(T.name))}</b> · ${esc(S.verdict?.depth_label || '')}`);
+        step(3, 'done', esc(S.verdict?.depth_label || 'simulated')); step(4, 'active', 'Gemini 4 Carbon is deciding…');
         say('Gemini 4 Carbon is deciding…');
         const DR = await DP;
         if (!alive()) return;
@@ -209,7 +223,9 @@ async function go() {
           D = DR.decision; R = DR.route;
           const dEta = toMin(R.times.at(-1)) - tmin.at(-1);
           const x7 = card('Decision · no human', esc(D.headline), `${actPill(D.action)}<span class="pill p-info">ETA ${hm(R.times.at(-1))} (${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min)</span>`);
-          x7.innerHTML = why(D);
+          x7.innerHTML = why(D); riderVoice(D.rider_message);
+          step(4, 'done', esc(D.headline));
+          etaLine(`<b>ETA ${hm(R.times.at(-1))}</b>${dEta >= 0 ? '+' : ''}${dEta.toFixed(1)} min vs fastest`);
           say(D.action === 'reroute' ? `Rerouted around ${title(T.name)}. The car never stopped.` : `Keeping the route: ${D.headline}`);
           if (D.action === 'reroute') {
             const t2 = L.polyline([R.coords[0]], {color: '#2fd18b', weight: 7, opacity: .95}).addTo(lay.route);
@@ -230,6 +246,7 @@ async function go() {
     }
     if (!alive()) return;
     lay.fx.clearLayers();
+    progress(1); for (let k = 0; k < 5; k++) { const e = $('st' + k); if (e && !e.classList.contains('done')) step(k, 'done'); }
     state('arrived'); say(`Arrived ${hm(R.times.at(-1))}${D && D.action === 'reroute' ? ' · never stopped' : ''}`);
   } catch (err) {
     card('Trip error', esc(err.message || String(err))); state('error');

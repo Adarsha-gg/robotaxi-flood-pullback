@@ -27,7 +27,27 @@ from zoneinfo import ZoneInfo
 SF_TZ = ZoneInfo("America/Los_Angeles")  # the trip happens in SF, whatever the laptop clock says
 
 
+_GEO_PATH = os.path.join(ROOT, "data", "raw", "geocode_cache.json")
+
+
 def geocode(q):
+    key = q.strip().lower()
+    try:
+        cache = json.load(open(_GEO_PATH))
+    except Exception:
+        cache = {}
+    if key in cache:
+        return cache[key]
+    out = _geocode_live(q)
+    cache[key] = out
+    try:
+        json.dump(cache, open(_GEO_PATH, "w"))
+    except Exception:
+        pass
+    return out
+
+
+def _geocode_live(q):
     url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(
         {"q": q if "san francisco" in q.lower() else q + ", San Francisco", "format": "json", "limit": 1,
          "viewbox": SF_BOX, "bounded": 1})
@@ -77,7 +97,8 @@ def plan(from_q, to_q, depart=None):
     six = LR._six(hours, (datetime.fromisoformat(depart) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"))
 
     # 1) flood notices from the last 72 h, on the route
-    nts = _near_route(notices(), fast["coords"], 45)
+    all_notices = notices()
+    nts = _near_route(all_notices, fast["coords"], 45)
     # 2) flood memory under tonight's forecast
     mem = ride._scan(fast, cells, max(six, 0.1), 6, 0.0, 1.0)
     # 3) lane closures active around departure
@@ -107,14 +128,22 @@ def plan(from_q, to_q, depart=None):
     pre = None
     cams = LR.cams_near(route_a, fast)
     try:
-        allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in notices()]
+        allnt = [{k: n[k] for k in ("t", "lat", "lon", "address")} for n in all_notices]
     except Exception:
         allnt = []
+    try:   # live National Weather Service alerts for San Francisco (e.g. a coastal flood warning)
+        req = urllib.request.Request("https://api.weather.gov/alerts/active?point=37.7749,-122.4194",
+                                     headers={"User-Agent": "flood-pullback-hackathon", "Accept": "application/geo+json"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            alerts = [{"event": f["properties"]["event"], "ends": (f["properties"].get("ends") or f["properties"].get("expires") or "")[:16],
+                       "headline": f["properties"].get("headline")} for f in json.load(r).get("features", [])]
+    except Exception:
+        alerts = []
     try:
         n_closed_today = len(ride.closures(depart[:10], depart, depart[:10] + "T23:59"))
     except Exception:
         n_closed_today = 0
-    return {"from": a, "to": b, "depart": depart, "notices_all": allnt, "closures_today": n_closed_today,
+    return {"from": a, "to": b, "depart": depart, "notices_all": allnt, "alerts": alerts, "closures_today": n_closed_today,
             "rain_today_mm": round(sum(h["mm"] for h in hours if h["t"][:10] == depart[:10]), 1), "forecast": [h for h in hours if h["t"] >= depart[:13] + ":00"][:8],
             "six_h_mm": six, "fast": ride._strip(fast), "route": ride._strip(route_a), "pre_decision": pre,
             "notices": nts, "memory": mem, "closures": cl, "flagged": flagged, "cams": cams, "avoid_cells": avoid,
@@ -164,8 +193,10 @@ def simulate(p, cams_now, session_holder):
     prompt = (f"Forward-facing roof camera of a driverless robotaxi in the travel lane, approaching {target['name'].title()}, "
               f"San Francisco, at {eta[11:16]}. {p['six_h_mm']} mm of rain over six hours, {mm} mm in that hour. "
               f"{len(target['notices'])} street-flooding reports here in the last 3 days; it flooded in "
-              f"{target.get('n_storm_days', 0)} past storms. Show the water on the driving lane and how high it reaches "
-              f"on car wheels. Keep the real street layout from the reference image. The car drives forward slowly.")
+              f"{target.get('n_storm_days', 0)} past storms. "
+              + ("Show the water on the driving lane and how high it reaches on car wheels. " if (mm >= 0.5 or p["six_h_mm"] >= 3) else
+                 "Little or no rain is forecast for that hour: show the road honestly as it will look, damp or dry, with no invented flooding. ")
+              + "Keep the real street layout from the reference image. The car drives forward slowly.")
     t0 = time.time()
     s, frame, first_s = None, None, None
     try:

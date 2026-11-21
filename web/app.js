@@ -18,7 +18,15 @@ async function waitGenieLive(isDone, tries = 45) {   // attach the live stream o
   }
   return false;
 }
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Space (or the ⏸ button) pauses the whole run between beats, so the presenter can take a question
+let PAUSED = false;
+const sleep = async ms => { await new Promise(r => setTimeout(r, ms)); while (PAUSED) await new Promise(r => setTimeout(r, 120)); };
+function togglePause() {
+  PAUSED = !PAUSED;
+  const b = $('pauseBtn'); if (b) { b.textContent = PAUSED ? '▶' : '⏸'; b.classList.toggle('on', PAUSED); }
+  document.body.classList.toggle('paused', PAUSED);
+}
+document.addEventListener('keydown', e => { if (e.code === 'Space' && !/INPUT|TEXTAREA|BUTTON/.test(document.activeElement?.tagName || '')) { e.preventDefault(); togglePause(); } });
 const hm = t => String(t || '').slice(11, 16);
 const toMin = t => +t.slice(11, 13) * 60 + +t.slice(14, 16) + (+t.slice(17, 19) || 0) / 60;
 const fmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.floor(m % 60)).padStart(2, '0');
@@ -37,7 +45,19 @@ const legend = id => { const e = $(id); if (e) e.classList.add('show'); };
 
 // ---------- panel: finished steps collapse to one line; one open card ----------
 let current = null;
-function collapse(line) { if (current) { current.remove(); current = null; } if (line) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
+function collapse(line) { if (current) { current.remove(); current = null; } if (line && !$('steps')?.children.length) $('feed').insertAdjacentHTML('beforeend', `<div class="done"><span class="ck">✓</span><span>${line}</span></div>`); }
+// step tracker (designed in Figma: Replay v2) + trip card progress
+function initSteps(list) {
+  $('steps').innerHTML = list.map(([h, d], i) => `<div class="st todo" id="st${i}"><div class="bd">${i + 1}</div><div><b>${esc(h)}</b><span>${esc(d)}</span></div></div>`).join('');
+}
+function step(i, st, detail) {
+  const e = $('st' + i); if (!e) return;
+  for (let k = 0; k < i && st === 'active'; k++) { const p = $('st' + k); if (p && !p.classList.contains('done')) { p.className = 'st done'; p.querySelector('.bd').textContent = '✓'; } }
+  e.className = 'st ' + st; e.querySelector('.bd').textContent = st === 'done' ? '✓' : i + 1;
+  if (detail != null) e.querySelector('span').innerHTML = detail;
+}
+const progress = f => { const p = $('prog'); if (p) p.style.width = Math.round(Math.max(0, Math.min(1, f)) * 100) + '%'; };
+const etaLine = t => { const e = $('eta'); if (e) e.innerHTML = t; };
 function card(k, h, p) {
   if (current) current.remove();
   $('feed').insertAdjacentHTML('beforeend', `<div class="card" id="cur"><div class="k">${k}</div><h3>${h}</h3>${p ? `<p>${p}</p>` : ''}<div id="curx"></div></div>`);
@@ -45,7 +65,7 @@ function card(k, h, p) {
 }
 new MutationObserver(() => { $('feed').scrollTop = $('feed').scrollHeight; }).observe($('feed'), {childList: true, subtree: true});
 const say = t => { const c = $('caption'); c.textContent = t; c.style.display = t ? 'block' : 'none'; };
-const state = (t, slow) => { $('state').textContent = t; $('state').className = slow ? 'slow' : ''; };
+const state = (t, slow) => { $('state').textContent = t; $('state').className = 'pillst ' + (slow ? 'slow' : /arrived|done/.test(t) ? 'done' : ''); };
 
 // ---------- map marks ----------
 const carIcon = () => L.divIcon({className: '', iconSize: [26, 26], iconAnchor: [13, 13],
@@ -87,7 +107,7 @@ async function drawLine(group, coords, style, ms) {
 const actPill = a => a === 'reroute' ? '<span class="pill p-slow">REROUTE</span>' : '<span class="pill p-go">KEEP ROUTE</span>';
 function why(D) {
   return `<ul class="why">${D.reasons.slice(0, 2).map(r => `<li>${esc(r)}</li>`).join('')}</ul>
-    ${D.rider_message ? `<div class="rider">“${esc(D.rider_message)}”</div>` : ''}
+    ${D.rider_message ? `<div class="rider"><button class="play" style="display:none" title="Play to the rider">🔊</button>“${esc(D.rider_message)}”</div>` : ''}
     <p>Gemini 4 Carbon · ${((D.latency_ms || 0) / 1000).toFixed(1)} s</p>`;
 }
 function meters(v) {
@@ -104,7 +124,8 @@ function stageOpen(street, when, seedSrc, seedLabel, fc) {
     <div class="fcline" id="simFc">${fc ? esc(fc) : ''}</div>
     <div class="frame"><img id="simImg" onerror="this.style.visibility='hidden'" onload="this.style.visibility='visible'">
       <div class="inset"><img id="seedImg" ${seedSrc ? `src="${seedSrc}"` : ''} onerror="this.style.visibility='hidden'"><div id="seedC">${esc(seedLabel || 'finding the nearest real image…')}</div></div>
-      <div class="tag live" id="simTag">LIVE</div></div>
+      <div class="tag live" id="simTag">LIVE</div>
+      <div class="stctl"><button onclick="genieKey('key_a')">◀</button><button onclick="genieKey('key_w')">▲ Drive</button><button onclick="genieKey('key_d')">▶</button></div></div>
     <div class="verdict" id="simV"></div>`;
   s.style.display = 'block'; requestAnimationFrame(() => s.classList.add('on')); say('');
 }
@@ -117,3 +138,12 @@ function stageResult(frame, when, v, secs) {
   if ($('simV') && v) { $('simV').innerHTML = `<div class="line">${verdictPill(v.action)} ${esc(v.depth_label || '')}</div>${meters(v)}`; $('simV').classList.add('on'); }
 }
 async function stageClose() { const s = $('stage'); s.classList.remove('on'); await sleep(260); s.style.display = 'none'; s.innerHTML = ''; }
+
+// Genie stage: drive the live world model (key_w / key_a / key_d)
+function genieKey(key) { post('/api/genie/key', {action: 'key_down', key}); setTimeout(() => post('/api/genie/key', {action: 'key_up', key}), 700); }
+// rider voice: Gemini TTS reads Carbon's rider message
+async function riderVoice(text) {
+  const v = await post('/api/voice', {text});
+  const b = document.querySelector('.rider .play');
+  if (v.path && b) { b.style.display = ''; b.onclick = () => new Audio('/' + v.path + '?t=' + Date.now()).play(); }
+}

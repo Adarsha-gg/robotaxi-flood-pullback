@@ -335,6 +335,12 @@ class Handler(SimpleHTTPRequestHandler):
                 GENIE["session"] = GenieSession(f.read(), prompt, max_seconds=float(b.get("max_seconds", 60))).start()
             GENIE["photo"] = {**photo, "zone": place}
             return self.send_json({"ok": True, "photo": GENIE["photo"]})
+        if u.path == "/api/voice":
+            from gem.voice import synthesize
+            out = synthesize(str(b.get("text", ""))[:400], os.path.join(ROOT, "media", "audio", "rider_live.wav"))
+            if not out.get("ok"):
+                return self.send_json({"error": out.get("error") or "tts failed"}, 502)
+            return self.send_json({"path": "media/audio/rider_live.wav", "latency_ms": out.get("latency_ms")})
         if u.path == "/api/genie/key":
             s = GENIE["session"]
             if not s:
