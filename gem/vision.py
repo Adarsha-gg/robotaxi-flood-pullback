@@ -18,6 +18,7 @@ DECISION_MODEL = "models/gemini-decision-1"
 VIDEO_MODEL = "gemini-4-hydrogen"
 DEPTH_CRITERIA = ["none", "wet", "ankle", "impassable"]
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXTS = {".mp4", ".mov", ".webm", ".mkv"}
 MAX_FRAME_DIM = 640
 
 
@@ -160,16 +161,17 @@ def judge_video(path: str) -> dict[str, Any]:
 
 def main(argv: list[str]) -> int:
     if not argv:
-        print("Usage: python -m gem.vision <image_path> [...]", file=sys.stderr)
+        print("Usage: python -m gem.vision <image_or_video_path> [...]", file=sys.stderr)
         return 2
 
     exit_code = 0
     for arg in argv:
         p = Path(arg)
-        if not p.is_file() or p.suffix.lower() not in IMAGE_EXTS:
+        ext = p.suffix.lower()
+        if not p.is_file() or (ext not in IMAGE_EXTS and ext not in VIDEO_EXTS):
             continue
         try:
-            verdict = judge_frame(p.read_bytes())
+            verdict = judge_video(str(p)) if ext in VIDEO_EXTS else judge_frame(p.read_bytes())
             print(json.dumps({"file": str(p), **verdict}))
         except Exception as exc:
             exit_code = 1
